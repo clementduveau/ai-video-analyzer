@@ -1,0 +1,11 @@
+[logger]
+level = "error"
+
+[client]
+showErrorDetails = true
+
+[runner]
+fastReruns = true
+
+[server]
+headless = false

@@ -1,0 +1,10 @@
+torch>=2.0.0  # PyTorch with MPS support for Apple Silicon
+whisper
+yt-dlp
+ffmpeg-python
+openai
+anthropic
+opencv-python
+streamlit
+tqdm
+python-dotenv

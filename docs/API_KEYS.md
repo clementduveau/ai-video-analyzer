@@ -1,0 +1,161 @@
+# API Key Configuration Guide
+
+This guide explains how to securely configure API keys for the video evaluator.
+
+## Quick Setup
+
+### 1. Create Your .env File
+
+```bash
+# Copy the example template
+cp .env.example .env
+
+# Edit with your actual keys
+nano .env  # or vim, or code .env
+```
+
+### 2. Add Your API Keys
+
+Edit `.env` to include your actual keys:
+
+```bash
+# OpenAI API Key (required for OpenAI provider)
+OPENAI_API_KEY=sk-proj-abc123xyz...
+
+# Anthropic API Key (required for Anthropic provider)
+ANTHROPIC_API_KEY=sk-ant-xyz789abc...
+```
+
+### 3. Secure the File (Recommended)
+
+```bash
+chmod 600 .env
+```
+
+This ensures only you can read/write the file.
+
+### 4. Test Your Configuration
+
+```bash
+python -c "import os; from dotenv import load_dotenv; load_dotenv(); \
+print('✓ OpenAI key loaded' if os.getenv('OPENAI_API_KEY') else '✗ No OpenAI key'); \
+print('✓ Anthropic key loaded' if os.getenv('ANTHROPIC_API_KEY') else '✗ No Anthropic key')"
+```
+
+## Getting API Keys
+
+### OpenAI API Key
+
+1. Go to https://platform.openai.com/api-keys
+2. Create a new secret key
+3. Copy the key (starts with `sk-proj-...`)
+4. Add to `.env` as `OPENAI_API_KEY`
+
+### Anthropic API Key
+
+1. Go to https://console.anthropic.com/settings/keys
+2. Create a new API key
+3. Copy the key (starts with `sk-ant-...`)
+4. Add to `.env` as `ANTHROPIC_API_KEY`
+
+## How Keys Are Loaded
+
+The system automatically loads API keys from environment variables based on the provider:
+
+- **OpenAI provider** → Looks for `OPENAI_API_KEY`
+- **Anthropic provider** → Looks for `ANTHROPIC_API_KEY`
+
+Example code:
+
+```python
+from src.video_evaluator import VideoEvaluator, AIProvider
+
+# API key automatically loaded from .env
+evaluator = VideoEvaluator(provider=AIProvider.OPENAI)
+
+# Process a video
+result = evaluator.process("demo.mp4")
+```
+
+## Running Tests
+
+### Without API Keys (Mock Mode)
+
+```bash
+python -m pytest tests/test_evaluator.py -v
+```
+
+Tests will run using mock evaluations (no actual API calls).
+
+### With API Keys (Real API Calls)
+
+```bash
+# Ensure .env exists with your keys
+python -m pytest tests/test_evaluator.py -v
+```
+
+With API keys configured in `.env`, the system will use real API calls for evaluation.
+
+## Security Best Practices
+
+✅ **DO:**
+
+- Keep `.env` file in `.gitignore` (already configured)
+- Set file permissions to 600: `chmod 600 .env`
+- Use different keys for development and production
+- Rotate keys periodically
+- Use `.env.example` as a template (safe to commit)
+
+❌ **DON'T:**
+
+- Commit `.env` to git
+- Share your `.env` file
+- Hard-code keys in source code
+- Use `export` in your shell (keys end up in history)
+- Share screenshots with visible API keys
+
+## Troubleshooting
+
+### "No API key found" Error
+
+1. Check that `.env` exists in project root
+2. Verify keys are set correctly in `.env`
+3. Ensure no extra spaces around the `=` sign
+4. Run the test command from step 4 above
+
+### Keys Not Loading
+
+```bash
+# Check if python-dotenv is installed
+pip list | grep python-dotenv
+
+# Verify .env location
+ls -la .env
+
+# Test loading manually
+python -c "from dotenv import load_dotenv; print(load_dotenv())"
+```
+
+### Permission Denied
+
+```bash
+# Fix file permissions
+chmod 600 .env
+```
+
+## Environment Variables Reference
+
+| Variable            | Purpose                      | Required For       |
+| ------------------- | ---------------------------- | ------------------ |
+| `OPENAI_API_KEY`    | OpenAI API authentication    | OpenAI provider    |
+| `ANTHROPIC_API_KEY` | Anthropic API authentication | Anthropic provider |
+
+## Example .env File
+
+```bash
+# Complete example .env file
+OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz123456789
+ANTHROPIC_API_KEY=sk-ant-xyz789abcdefghijklmnopqrstuvwxyz123456
+```
+
+Remember: This file should NEVER be committed to git!

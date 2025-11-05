@@ -1,0 +1,69 @@
+{
+  "rubric_id": "default",
+  "version": "1.0",
+  "name": "Default Rubric",
+  "description": "Balanced rubric for general partner demo videos",
+  "categories": [
+    {
+      "category_id": "content_quality",
+      "label": "Content Quality",
+      "weight": 0.8,
+      "max_points": 40,
+      "criteria": [
+        {
+          "criterion_id": "technical_accuracy",
+          "label": "Technical Accuracy",
+          "desc": "Correctness of technical claims and explanations",
+          "max_points": 12
+        },
+        {
+          "criterion_id": "clarity",
+          "label": "Clarity",
+          "desc": "How easy the explanation is to follow",
+          "max_points": 10
+        },
+        {
+          "criterion_id": "completeness",
+          "label": "Completeness",
+          "desc": "Coverage of key features and flows",
+          "max_points": 8
+        },
+        {
+          "criterion_id": "value_demonstration",
+          "label": "Value Demonstration",
+          "desc": "Articulation of business/customer value",
+          "max_points": 10
+        }
+      ]
+    },
+    {
+      "category_id": "presentation",
+      "label": "Presentation",
+      "weight": 0.2,
+      "max_points": 10,
+      "criteria": [
+        {
+          "criterion_id": "production_quality",
+          "label": "Production Quality",
+          "desc": "Audio clarity and pacing",
+          "max_points": 5
+        },
+        {
+          "criterion_id": "multimodal_alignment",
+          "label": "Multimodal Alignment",
+          "desc": "Transcript and visuals are consistent (non-feature-specific)",
+          "max_points": 5
+        }
+      ]
+    }
+  ],
+  "scale": {
+    "min": 25,
+    "max": 50
+  },
+  "overall_method": "total_points",
+  "thresholds": {
+    "pass": 35,
+    "revise": 30
+  }
+}
