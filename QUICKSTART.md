@@ -32,41 +32,19 @@ python test_data/run_end_to_end_demo.py
 
 2. **Process a video:**
 
-   ```bash
-   source .venv/bin/activate
-
-   # From local file
-   python cli/evaluate_video.py path/to/demo.mp4 --provider anthropic
-
-   # From URL (YouTube, Vimeo, or direct links)
-   python cli/evaluate_video.py "https://youtube.com/watch?v=..." --provider openai
-   ```
+   Use the Streamlit UI to upload files or enter URLs for analysis.
 
 3. **Use a specific rubric** (sales-demo, technical-demo, or default):
 
-   ```bash
-   # List available rubrics
-   python cli/evaluate_video.py --list-rubrics
-
-   # Use sales rubric (emphasizes business value)
-   python cli/evaluate_video.py path/to/demo.mp4 --rubric sales-demo --provider openai
-
-   # Use technical rubric (emphasizes technical accuracy)
-   python cli/evaluate_video.py path/to/demo.mp4 --rubric technical-demo --provider anthropic
-   ```
+   Select the desired rubric from the dropdown in the Streamlit UI sidebar.
 
 4. **With vision analysis:**
 
-   ```bash
-   python cli/evaluate_video.py path/to/demo.mp4 --provider openai --vision
-   ```
+   Check the "Enable visual alignment checks" box in the Streamlit UI.
 
 5. **Keep original language (disable default translation):**
-   ```bash
-   # By default, non-English audio is translated to English
-   # Use --no-translate to keep the original language
-   python cli/evaluate_video.py spanish_demo.mp4 --provider openai --no-translate
-   ```
+
+   Uncheck the "Translate to English" box in the Streamlit UI.
 
 ### Option 3: Use Web Interface
 
@@ -138,8 +116,8 @@ python cli/evaluate_video.py video.mp4 --provider openai
 
 Analyze videos directly from URLs without downloading:
 
-- **YouTube**: `python cli/evaluate_video.py "https://youtube.com/watch?v=..." --provider openai`
-- **Vimeo**: `python cli/evaluate_video.py "https://vimeo.com/..." --provider openai`
+- **YouTube**: Enter URL in the Streamlit UI
+- **Vimeo**: Enter URL in the Streamlit UI
 - **Direct Links**: Any direct video URL (MP4, etc.)
 
 The system automatically downloads and processes videos from URLs, with automatic cleanup after analysis.
@@ -185,8 +163,7 @@ The system supports multiple evaluation rubrics stored in `rubrics/` directory. 
 
 **Commands:**
 
-- `python cli/evaluate_video.py --list-rubrics` - Show all available rubrics
-- `--rubric <name>` - Use a specific rubric (default: "default")
+- Use the Streamlit UI sidebar to select rubrics and view their details
 
 **See:** `rubrics/README.md` for complete rubric documentation and custom rubric creation.
 
@@ -228,20 +205,6 @@ Share results with partner
 ```bash
 # Activate environment
 source .venv/bin/activate
-
-# List available rubrics
-python cli/evaluate_video.py --list-rubrics
-
-# Evaluate with specific rubric
-python cli/evaluate_video.py video.mp4 --rubric sales-demo --provider anthropic
-
-# Evaluate one video (default rubric)
-python cli/evaluate_video.py video.mp4 --provider anthropic
-
-# Batch evaluate (use shell loop)
-for f in videos/*.mp4; do
-    python cli/evaluate_video.py "$f" --rubric sales-demo --provider anthropic > "results/$(basename $f .mp4).json"
-done
 
 # Launch UI
 streamlit run app/reviewer.py

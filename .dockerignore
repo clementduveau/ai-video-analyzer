@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation and development files
+*.md
+!README.md
+docs/
+.github/
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+
+# Results (will be mounted as volume)
+results/
+
+# Environment files (will be mounted as volume if needed)
+.env
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore

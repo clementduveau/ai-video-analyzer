@@ -84,27 +84,16 @@ result = {
 }
 ```
 
-**3. Enhanced CLI Output**
+**3. Enhanced UI Output**
 
-Location: `cli/evaluate_video.py`
+Location: `app/reviewer.py`
 
-The CLI now displays:
+The UI now displays:
 
 - Overall score and status prominently
 - Feedback section with tone indicator
 - Formatted strengths and improvements
-- Full JSON output for programmatic access
-
-**4. Enhanced Streamlit UI**
-
-Location: `app/reviewer.py`
-
-The web interface includes:
-
-- Color-coded metrics (score and status)
-- Emoji indicators for tone (🎉/🤝)
-- Expandable sections for each strength/improvement
-- Clean, professional presentation
+- Full JSON output available for download
 
 ### Testing
 
@@ -155,19 +144,17 @@ Both tests verify:
 
 ## Usage Examples
 
-### CLI Usage
+### UI Usage
 
 ```bash
-# Basic evaluation with feedback
-python cli/evaluate_video.py demo.mp4 --provider openai
-
-# Output includes:
-# - Overall score and status
-# - Feedback section (CONGRATULATORY or SUPPORTIVE tone)
-# - 2 strengths with descriptions
-# - 2 improvements with descriptions
-# - Full JSON output
+streamlit run app/reviewer.py
 ```
+
+1. Upload a video or provide URL
+2. Select AI provider
+3. Configure evaluation settings
+4. Click "Evaluate Video"
+5. View feedback in expandable sections below the scores
 
 ### Programmatic Usage
 
@@ -191,17 +178,6 @@ for improvement in feedback['improvements']:
     print(f"→ {improvement['title']}")
     print(f"  {improvement['description']}")
 ```
-
-### Streamlit UI
-
-```bash
-streamlit run app/reviewer.py
-```
-
-1. Upload a video
-2. Select AI provider
-3. Click "Analyze"
-4. View feedback in expandable sections below the scores
 
 ## Design Decisions
 

@@ -23,40 +23,20 @@ def save_results(result: Dict[str, Any], input_filename: str, output_format: str
 - Prevents overwrites by using unique timestamps
 - Returns the path to the saved file
 
-### CLI Integration
-
-**File**: `cli/evaluate_video.py`
-
-After evaluation completes, results are automatically saved:
-
-```python
-# Save results to file
-saved_path = save_results(result, args.file, output_format='txt')
-
-# Notify user (after pagination)
-print(f"\n💾 Results saved to: {saved_path}")
-```
-
-**User Experience**:
-
-1. Run evaluation: `python cli/evaluate_video.py video.wav --provider openai`
-2. View paginated output in terminal
-3. See confirmation: `💾 Results saved to: results/video_results_20251010_130222.txt`
-4. Access saved file: `cat results/video_results_20251010_130222.txt`
-5. Run again - new timestamped file created, previous preserved
-
 ### UI Integration
 
 **File**: `app/reviewer.py`
 
-The Streamlit UI saves text format only (JSON export disabled for simplicity):
+The Streamlit UI saves both text and JSON formats:
 
 ```python
 # Save results to file
 saved_txt_path = save_results(res, original_filename, output_format='txt')
+saved_json_path = save_results(res, original_filename, output_format='json')
 
-# Provide download button
+# Provide download buttons
 st.download_button("📄 Download Text Report", data=txt_content, ...)
+st.download_button("📊 Download JSON Data", data=json_content, ...)
 ```
 
 **User Experience**:
@@ -64,10 +44,8 @@ st.download_button("📄 Download Text Report", data=txt_content, ...)
 1. Upload/enter URL and evaluate video in UI
 2. View formatted results in browser
 3. Results automatically saved to `results/`
-4. Download button for text report
+4. Download buttons for both text and JSON reports
 5. Success message: `💾 Results saved to results/ folder`
-
-**Note**: JSON export is currently disabled in the UI. See `REMINDER_JSON_EXPORT.md` for information on re-enabling if needed for dashboards, APIs, or bulk analysis.
 
 ## File Formats
 
@@ -216,15 +194,12 @@ mv results/*_results.* archives/2025-10/
 
 ### 4. Compare Before/After
 
-```bash
-# Evaluate original version
-python cli/evaluate_video.py demo_v1.wav --provider openai
-mv results/demo_v1_results.txt results/demo_v1_original.txt
+In the Streamlit UI:
 
-# Evaluate revised version
-python cli/evaluate_video.py demo_v1.wav --provider openai
-diff results/demo_v1_original.txt results/demo_v1_results.txt
-```
+1. **First evaluation:** Upload `demo_v1.wav`, evaluate, note the timestamp
+2. **Make improvements** to the demo
+3. **Second evaluation:** Upload the improved version, evaluate
+4. **Compare:** View both timestamped result files in the `results/` directory
 
 ## Documentation Updates
 
@@ -234,7 +209,7 @@ Added "Results Storage" section documenting:
 
 - Auto-save functionality
 - File formats and locations
-- CLI and UI behavior
+- UI behavior
 - Example usage
 
 ### Project Structure
@@ -258,24 +233,6 @@ Created comprehensive documentation covering:
 
 ## Testing
 
-### CLI Test
-
-```bash
-# Run evaluation
-python cli/evaluate_video.py test_data/realistic_demo.wav --provider openai
-
-# Verify file exists
-ls -lh results/realistic_demo_results.txt
-
-# Check content
-head -50 results/realistic_demo_results.txt
-
-# Verify notification appears
-# Should see: 💾 Results saved to: results/realistic_demo_results.txt
-```
-
-**Expected**: 357-line text file with complete evaluation output
-
 ### UI Test
 
 ```bash
@@ -289,6 +246,8 @@ streamlit run app/reviewer.py
 #   - Download buttons for text and JSON
 #   - Both files created in results/
 ```
+
+**Expected**: Text and JSON files with complete evaluation output
 
 ## Benefits
 
@@ -331,13 +290,13 @@ Potential improvements for the results system:
 
 ## Conclusion
 
-The results saving feature provides a complete solution for persisting evaluation outputs in both human-readable and machine-readable formats. It integrates seamlessly with both CLI and UI workflows, respects privacy through git-ignore, and enables a wide range of use cases from simple sharing to complex analytics.
+The results saving feature provides a complete solution for persisting evaluation outputs in both human-readable and machine-readable formats. It integrates seamlessly with the UI workflow, respects privacy through git-ignore, and enables a wide range of use cases from simple sharing to complex analytics.
 
 **Key Achievements**:
 ✅ Automatic save after every evaluation  
 ✅ Two formats (text for humans, JSON for machines)  
 ✅ Privacy-first (git-ignored by default)  
-✅ CLI and UI integration  
+✅ UI integration  
 ✅ User notifications and download options  
 ✅ Comprehensive documentation  
 ✅ Ready for production use

@@ -32,20 +32,16 @@ The demo video analyzer now supports multiple evaluation rubrics optimized for d
 - **Pass Threshold:** ≥ 7.0/10 (higher bar)
 - **Criteria:** Technical Accuracy (40%), Completeness (25%), Clarity (20%), Code Quality (10%), Production Quality (5%)
 
-### 2. CLI Enhancements
+### 2. UI Enhancements
 
-```bash
-# List available rubrics
-python cli/evaluate_video.py --list-rubrics
+The Streamlit web interface provides:
 
-# Use specific rubric
-python cli/evaluate_video.py video.mp4 --rubric sales-demo --provider openai
+- **Rubric Dropdown:** Select from available rubrics in the sidebar before analysis
+- **Description Display:** Shows rubric description and criteria below selection
+- **Default Selection:** Default rubric pre-selected
+- **Dynamic Evaluation:** Results adapt to selected rubric
 
-# Default rubric (if --rubric not specified)
-python cli/evaluate_video.py video.mp4 --provider openai
-```
-
-**Output includes:**
+**UI includes:**
 
 - Selected rubric name during analysis
 - Feedback based on rubric-specific criteria
@@ -100,16 +96,10 @@ See `rubrics/README.md` for detailed instructions.
    - Changed all `RUBRIC` references to `self.rubric` for instance-specific rubrics
    - Dynamic LLM prompt generation based on rubric criteria
 
-2. **`cli/evaluate_video.py`**
+2. **`app/reviewer.py`**
 
-   - Added `--rubric` argument (defaults to "default")
-   - Added `--list-rubrics` command
-   - Made file argument optional when listing rubrics
-   - Displays selected rubric during analysis
-
-3. **`app/reviewer.py`**
-   - Added rubric selection dropdown
-   - Displays rubric description
+   - Added rubric selection dropdown in sidebar
+   - Displays rubric description and criteria
    - Passes selected rubric to evaluator
 
 ### Backward Compatibility
@@ -157,26 +147,34 @@ Verified functionality:
 
 ### Scenario 1: Sales Team Demo Review
 
-```bash
-python cli/evaluate_video.py sales_pitch.mp4 --rubric sales-demo --provider openai
-```
+In the Streamlit UI:
+
+1. Select "sales-demo" rubric from the sidebar dropdown
+2. Upload or provide URL for `sales_pitch.mp4`
+3. Choose OpenAI provider
+4. Click "Evaluate Video"
 
 **Result:** Emphasizes business value (35%), engagement (20%), and clarity (25%)
 
 ### Scenario 2: Technical Partnership Review
 
-```bash
-python cli/evaluate_video.py technical_demo.mp4 --rubric technical-demo --provider openai
-```
+In the Streamlit UI:
+
+1. Select "technical-demo" rubric from the sidebar dropdown
+2. Upload or provide URL for `technical_demo.mp4`
+3. Choose OpenAI provider
+4. Click "Evaluate Video"
 
 **Result:** Emphasizes technical accuracy (40%), completeness (25%), and code quality (10%)
 
 ### Scenario 3: General Partner Demo
 
-```bash
-python cli/evaluate_video.py partner_demo.mp4 --provider openai
-# Uses default rubric automatically
-```
+In the Streamlit UI:
+
+1. Use default rubric (pre-selected)
+2. Upload or provide URL for `partner_demo.mp4`
+3. Choose OpenAI provider
+4. Click "Evaluate Video"
 
 **Result:** Balanced evaluation across all standard criteria
 

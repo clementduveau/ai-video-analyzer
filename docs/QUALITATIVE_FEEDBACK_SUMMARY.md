@@ -21,23 +21,16 @@
 
 - Called after rubric evaluation
 - Included in result dictionary under `feedback` key
-- Available in all output formats (CLI, Streamlit, JSON)
+- Available in all output formats (Streamlit, JSON)
 
 ### UI Enhancements
 
-✅ **CLI tool** (`cli/evaluate_video.py`)
+✅ **Streamlit app** (`app/reviewer.py`)
 
 - Formatted feedback display with tone indicator
 - Clear separation of strengths and improvements
 - Emoji indicators (✓ for strengths, → for improvements)
-- Full JSON output still available
-
-✅ **Streamlit app** (`app/reviewer.py`)
-
-- Prominent feedback section with emoji indicators
-- Color-coded status badges (🟢 PASS / 🟡 REVISE / 🔴 FAIL)
-- Expandable sections for each strength and improvement
-- Professional, clean presentation
+- Full JSON output available for download
 
 ### Testing
 
@@ -147,30 +140,24 @@ When no LLM is available:
    - Integrated into `process()` method
    - Handles both OpenAI and Anthropic providers
 
-2. **cli/evaluate_video.py** (+29 lines)
+2. **app/reviewer.py** (+34 lines)
 
    - Added formatted feedback display
    - Improved output structure
    - Better visual hierarchy
 
-3. **app/reviewer.py** (+34 lines)
-
-   - Added feedback section with expandable items
-   - Color-coded metrics
-   - Emoji tone indicators
-
-4. **tests/test_evaluator.py** (+77 lines)
+3. **tests/test_evaluator.py** (+77 lines)
 
    - 2 new comprehensive unit tests
    - Tests both passing and failing scenarios
    - Validates structure and content
 
-5. **test_data/run_end_to_end_demo.py** (+21 lines)
+4. **test_data/run_end_to_end_demo.py** (+21 lines)
 
    - Added feedback generation to demo
    - Displays formatted output
 
-6. **README.md** (+21 lines)
+5. **README.md** (+21 lines)
    - Updated features list
    - Added feedback section
    - Enhanced documentation
@@ -180,7 +167,7 @@ When no LLM is available:
 7. **FEEDBACK_EXAMPLE.md** (new file, 182 lines)
 
    - Detailed examples of both tones
-   - Shows CLI and Streamlit outputs
+   - Shows Streamlit outputs
    - Explains feedback generation process
 
 8. **FEEDBACK_FEATURE.md** (new file, 284 lines)
@@ -243,7 +230,6 @@ $ python check_dependencies.py
 
 - [x] Feedback generation method implemented
 - [x] Integration with main processing pipeline
-- [x] CLI displays feedback properly
 - [x] Streamlit UI shows feedback with expandables
 - [x] **Time-referenced analysis using segments** (October 20, 2025)
 - [x] Unit tests created and passing
@@ -262,40 +248,17 @@ $ python check_dependencies.py
 
 ## Usage Examples
 
-### Command Line
+### Streamlit UI
 
 ```bash
-# Evaluate a video with feedback
-python cli/evaluate_video.py demo.mp4 --provider openai
-
-# Output includes:
-# ======================================================================
-# DEMO VIDEO EVALUATION RESULTS
-# ======================================================================
-#
-# Overall Score: 7.8/10
-# Status: PASS
-#
-# ----------------------------------------------------------------------
-# FEEDBACK (CONGRATULATORY TONE)
-# ----------------------------------------------------------------------
-#
-# ✓ STRENGTHS:
-#
-# 1. Excellent Technical Depth
-#    Your demo demonstrated strong technical understanding...
-#
-# 2. Clear Value Proposition
-#    You effectively articulated how the product solves...
-#
-# → AREAS FOR IMPROVEMENT:
-#
-# 1. Production Quality Enhancements
-#    Consider improving audio clarity by using...
-#
-# 2. Navigation Transitions
-#    While the content was excellent, some screen transitions...
+streamlit run app/reviewer.py
 ```
+
+1. Upload video file or provide URL
+2. Select provider (OpenAI/Anthropic)
+3. Configure evaluation settings
+4. Click "Evaluate Video"
+5. View feedback with expandable sections
 
 ### Python API
 
@@ -317,18 +280,6 @@ for improvement in feedback['improvements']:
     print(f"→ {improvement['title']}: {improvement['description']}")
 ```
 
-### Streamlit Web UI
-
-```bash
-streamlit run app/reviewer.py
-```
-
-1. Upload video file
-2. Select provider (OpenAI/Anthropic)
-3. Enter API key
-4. Click "Analyze"
-5. View feedback with expandable sections
-
 ---
 
 ## Performance Impact
@@ -346,7 +297,7 @@ streamlit run app/reviewer.py
 
 - Existing code continues to work
 - Feedback is an additional field in result dictionary
-- CLI and Streamlit gracefully handle missing feedback
+- Streamlit gracefully handles missing feedback
 - Unit tests all pass
 
 ---
@@ -368,7 +319,7 @@ Recommended enhancements:
 ✅ **Feature successfully implemented**
 ✅ **All tests passing (3/3)**
 ✅ **Documentation complete**
-✅ **UI enhanced (CLI + Streamlit)**
+✅ **UI enhanced**
 ✅ **No breaking changes**
 ✅ **Ready for production use**
 

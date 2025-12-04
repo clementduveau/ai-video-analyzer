@@ -88,39 +88,6 @@ The feedback aims to be:
 
 ## Accessing Feedback
 
-### CLI Output
-
-```bash
-$ python cli/evaluate_video.py demo.mp4 --provider anthropic
-
-======================================================================
-DEMO VIDEO EVALUATION RESULTS
-======================================================================
-
-Overall Score: 7.8/10
-Status: PASS
-
-----------------------------------------------------------------------
-FEEDBACK (CONGRATULATORY TONE)
-----------------------------------------------------------------------
-
-✓ STRENGTHS:
-
-1. Excellent Technical Depth
-   Your demo demonstrated strong technical understanding...
-
-2. Clear Value Proposition
-   You effectively articulated how the product solves...
-
-→ AREAS FOR IMPROVEMENT:
-
-1. Production Quality Enhancements
-   Consider improving audio clarity by using...
-
-2. Navigation Transitions
-   While the content was excellent, some screen transitions...
-```
-
 ### Streamlit UI
 
 The web interface displays feedback with:

@@ -264,7 +264,17 @@ def save_rubric_to_file(rubric: Dict[str, Any], filename: str, create_backup: bo
             # Copy current file to backup
             import shutil
             shutil.copy2(rubric_path, backup_path)
-            print(f"💾 Backup created: {backup_filename}")
+            
+            # Mark the backup as archived
+            try:
+                with open(backup_path, 'r') as f:
+                    backup_rubric = json.load(f)
+                backup_rubric['status'] = 'archive'
+                with open(backup_path, 'w') as f:
+                    json.dump(backup_rubric, f, indent=2)
+                print(f"💾 Backup created: {backup_filename} (status: archive)")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not mark backup as archived: {e}")
 
         except Exception as e:
             print(f"⚠️  Warning: Could not create backup: {e}")
@@ -308,7 +318,8 @@ def list_available_rubrics() -> List[Dict[str, str]]:
 
                 # Validate before adding to list
                 is_valid, _ = validate_rubric(rubric_data)
-                if is_valid:
+                # Only include rubrics marked as current
+                if is_valid and rubric_data.get('status') == 'current':
                     available.append({
                         'filename': rubric_file.stem,
                         'name': rubric_data.get('name', rubric_file.stem),
@@ -317,12 +328,12 @@ def list_available_rubrics() -> List[Dict[str, str]]:
             except (json.JSONDecodeError, Exception):
                 continue
 
-    # Ensure default is always available
-    if not any(r['filename'] == 'default' for r in available):
+    # Ensure sample rubric is always available
+    if not any(r['filename'] == 'sample-rubric' for r in available):
         available.insert(0, {
-            'filename': 'default',
-            'name': 'Default Rubric',
-            'description': 'Built-in default rubric'
+            'filename': 'sample-rubric',
+            'name': 'Sample Rubric',
+            'description': 'Built-in sample rubric'
         })
 
     return available
@@ -401,6 +412,9 @@ def restore_rubric_version(filename: str, version: str) -> Tuple[bool, Optional[
             rubric = json.load(f)
     except Exception as e:
         return False, f"Error loading backup: {e}"
+
+    # Ensure the restored rubric has current status
+    rubric['status'] = 'current'
 
     # Save as current version (without creating another backup)
     current_path = rubrics_dir / f"{filename}.json"
@@ -607,6 +621,7 @@ def create_rubric_interactive() -> Dict[str, Any]:
     rubric = {
         'rubric_id': rubric_id,
         'version': version,
+        'status': 'current',
         'name': name,
         'description': description,
         'categories': categories,

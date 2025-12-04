@@ -79,33 +79,27 @@ diff results/my_demo_results_20251010_100000.txt \
 
 ### Before/After Comparison
 
-```bash
-# Evaluate original
-python cli/evaluate_video.py demo.wav --provider openai
-# → results/demo_results_20251010_100000.txt (Score: 5.5)
+In the Streamlit UI:
 
-# Make improvements to demo
+1. **First evaluation:** Upload `demo.wav`, select provider, click "Evaluate Video"
 
-# Evaluate revised version
-python cli/evaluate_video.py demo.wav --provider openai
-# → results/demo_results_20251010_120000.txt (Score: 7.5)
+   - Result saved as: `results/demo_results_20251010_100000.txt` (Score: 5.5)
 
-# Compare results
-diff results/demo_results_*.txt | grep "Score:"
-```
+2. **Make improvements to demo**
+
+3. **Second evaluation:** Upload the improved `demo.wav`, select provider, click "Evaluate Video"
+
+   - Result saved as: `results/demo_results_20251010_120000.txt` (Score: 7.5)
+
+4. **Compare results:** View both timestamped files in the `results/` directory
 
 ### Progress Tracking
 
-```bash
-# View all evaluations for a file
-ls -lt results/my_demo_results_*.txt
+In the Streamlit UI:
 
-# Show score progression
-for f in results/my_demo_results_*.txt; do
-  echo -n "$(basename $f): "
-  grep "Overall Score:" $f
-done
-```
+- **View all evaluations:** Check the `results/` directory for all timestamped files
+- **Score progression:** Each evaluation creates a new timestamped file automatically
+- **No manual tracking needed:** The system preserves complete history
 
 ### Batch Analysis
 
@@ -132,32 +126,26 @@ for r in results:
 
 ### Test 1: Multiple Runs Don't Overwrite
 
-```bash
-# Run 1
-python cli/evaluate_video.py test.wav --provider openai
-# → results/test_results_20251010_130443.txt
+In the Streamlit UI:
 
-# Run 2 (2 seconds later)
-python cli/evaluate_video.py test.wav --provider openai
-# → results/test_results_20251010_130445.txt
+1. **Run 1:** Upload `test.wav`, select provider, click "Evaluate Video"
 
-# Both files exist ✓
-ls results/test_results_*.txt
-# test_results_20251010_130443.txt
-# test_results_20251010_130445.txt
-```
+   - Result: `results/test_results_20251010_130443.txt`
+
+2. **Run 2:** Upload the same `test.wav` again, click "Evaluate Video"
+
+   - Result: `results/test_results_20251010_130445.txt`
+
+3. **Verification:** Both timestamped files exist in `results/` directory ✓
 
 ### Test 2: Different Files Don't Conflict
 
-```bash
-# Evaluate multiple different files
-python cli/evaluate_video.py demo1.wav --provider openai
-python cli/evaluate_video.py demo2.wav --provider openai
+In the Streamlit UI:
 
-ls results/
-# demo1_results_20251010_130500.txt
-# demo2_results_20251010_130510.txt
-```
+1. **Evaluate multiple files:** Upload `demo1.wav`, then `demo2.wav`
+2. **Results:** Each creates separate timestamped files:
+   - `results/demo1_results_20251010_130500.txt`
+   - `results/demo2_results_20251010_130510.txt`
 
 ### Test 3: JSON and Text Both Timestamped
 

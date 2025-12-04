@@ -19,6 +19,7 @@ def test_evaluator_without_real_audio():
     
     # Initialize evaluator (API key loaded from .env)
     evaluator = VideoEvaluator(
+        rubric_path="default",
         provider=AIProvider.ANTHROPIC, 
         enable_vision=False
     )

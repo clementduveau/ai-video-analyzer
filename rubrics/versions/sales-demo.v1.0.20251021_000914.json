@@ -1,6 +1,7 @@
 {
   "rubric_id": "sales-demo",
   "version": "1.0",
+  "status": "archive",
   "name": "Sales Demo Rubric",
   "description": "Optimized for customer-facing sales demonstrations",
   "categories": [

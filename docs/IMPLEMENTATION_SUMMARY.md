@@ -16,20 +16,14 @@
    - Supports OpenAI and Anthropic providers
    - Graceful fallbacks when dependencies unavailable
 
-2. **CLI Tool** (`cli/evaluate_video.py`)
+2. **Streamlit Reviewer** (`app/reviewer.py`)
 
-   - Process videos from command line
+   - Process videos via web interface
    - Choose AI provider (OpenAI/Anthropic)
    - Enable/disable vision analysis
-   - Output structured JSON
+   - Output structured JSON with download options
 
-3. **Streamlit Reviewer** (`app/reviewer.py`)
-
-   - Upload videos via web interface
-   - View transcripts, visual analysis, and evaluations
-   - Human-in-the-loop review scaffold
-
-4. **Test Suite**
+3. **Test Suite**
    - Unit test for rubric evaluation
    - End-to-end demo without requiring real media
    - Sample audio generator
@@ -80,8 +74,6 @@ NEW FILES:
 ├── src/
 │   ├── __init__.py
 │   └── video_evaluator.py (core implementation)
-├── cli/
-│   └── evaluate_video.py (command-line interface)
 ├── app/
 │   └── reviewer.py (Streamlit UI)
 ├── test_data/
@@ -94,7 +86,7 @@ NEW FILES:
 MODIFIED FILES:
 - src/video_evaluator.py (added lazy imports, fallbacks)
 - tests/test_evaluator.py (added sys.path fix)
-- cli/evaluate_video.py (added sys.path fix)
+- app/reviewer.py (added sys.path fix)
 ```
 
 ## Rubric Details
@@ -184,7 +176,8 @@ MODIFIED FILES:
 ### 1. Basic Evaluation (Free, Local)
 
 ```bash
-python cli/evaluate_video.py demo.mp4 --provider anthropic
+streamlit run app/reviewer.py
+# Then upload demo.mp4 and evaluate
 # Uses: Whisper (local) + fallback heuristic scoring
 # Cost: $0 (requires ffmpeg installed)
 ```
@@ -193,7 +186,8 @@ python cli/evaluate_video.py demo.mp4 --provider anthropic
 
 ```bash
 export API_KEY=sk-ant-...
-python cli/evaluate_video.py demo.mp4 --provider anthropic
+streamlit run app/reviewer.py
+# Select Anthropic provider, upload demo.mp4, evaluate
 # Uses: Whisper (local) + Anthropic Claude for rubric
 # Cost: ~$0.01-0.05 per video (depending on length)
 ```
@@ -202,18 +196,10 @@ python cli/evaluate_video.py demo.mp4 --provider anthropic
 
 ```bash
 export API_KEY=sk-...
-python cli/evaluate_video.py demo.mp4 --provider openai --vision
+streamlit run app/reviewer.py
+# Enable vision analysis, select OpenAI provider, upload demo.mp4, evaluate
 # Uses: Whisper + OpenAI GPT-4o (multimodal)
 # Cost: ~$0.10-0.30 per video (depending on frames)
-```
-
-### 4. Streamlit Reviewer UI
-
-```bash
-streamlit run app/reviewer.py
-# Upload videos via browser
-# Review transcripts, visual analysis, and scores
-# Edit/override AI evaluations
 ```
 
 ## What's Still Needed

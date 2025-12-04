@@ -10,6 +10,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 import streamlit as st
 import json
 from pathlib import Path
+from datetime import datetime
 
 # Check for dependencies
 try:
@@ -24,10 +25,96 @@ except ImportError as e:
     st.code("pip install -r requirements.txt", language="bash")
     st.stop()
 
-st.title('Demo Video Reviewer')
+st.title('Demo Video Analyzer')
+
+# Hide anchor links on headers to prevent link mouseover
+st.markdown("""
+<style>
+/* Hide anchor links on headers */
+h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
+    display: none !important;
+}
+/* Also hide any anchor elements within header containers */
+.st-emotion-cache-1v0mbdj a,
+.st-emotion-cache-10trblm a {
+    display: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Configuration management for default rubric
+CONFIG_FILE = Path(__file__).parent.parent / ".streamlit_config.json"
+
+def load_config():
+    """Load configuration from file."""
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_config(config):
+    """Save configuration to file."""
+    try:
+        CONFIG_FILE.parent.mkdir(exist_ok=True)
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except Exception as e:
+        st.error(f"Failed to save configuration: {e}")
+
+# Get available rubrics (needed for rubric management section)
+available_rubrics = list_available_rubrics()
+rubric_options = {r['name']: r['filename'] for r in available_rubrics}
+rubric_descriptions = {r['name']: r['description'] for r in available_rubrics}
+
+# Load configuration and determine default rubric
+config = load_config()
+default_rubric_filename = config.get('default_rubric', 'sample-rubric')  # Default to 'sample-rubric'
+
+# Find the rubric name that corresponds to the default filename
+default_rubric_name = None
+for name, filename in rubric_options.items():
+    if filename == default_rubric_filename:
+        default_rubric_name = name
+        break
+
+# If the configured default doesn't exist, fall back to 'sample-rubric' or the first available
+if not default_rubric_name:
+    if 'sample-rubric' in rubric_options.values():
+        for name, filename in rubric_options.items():
+            if filename == 'sample-rubric':
+                default_rubric_name = name
+                break
+    else:
+        # Fall back to first available rubric
+        default_rubric_name = list(rubric_options.keys())[0] if rubric_options else None
 
 # Add dependency check status in sidebar
 with st.sidebar:
+    # Rubric selection (moved to top of sidebar)
+    st.subheader("⚙️ Evaluation Settings")
+    selected_rubric_name = st.selectbox(
+        'Evaluation Rubric',
+        options=list(rubric_options.keys()),
+        index=list(rubric_options.keys()).index(default_rubric_name) if default_rubric_name in rubric_options else 0,
+        help='Choose the rubric to use for evaluation'
+    )
+    if selected_rubric_name:
+        st.caption(f"📋 {rubric_descriptions[selected_rubric_name]}")
+    
+    # Button to set current selection as default
+    if selected_rubric_name and rubric_options[selected_rubric_name] != config.get('default_rubric'):
+        if st.button("Set as Default Rubric", use_container_width=True, help="Make this rubric the default for future sessions"):
+            config['default_rubric'] = rubric_options[selected_rubric_name]
+            save_config(config)
+            st.success(f"✅ '{selected_rubric_name}' is now the default rubric!")
+            st.rerun()
+    
+    provider = st.selectbox('AI Provider', ['openai','anthropic'])
+
+    # System Status (moved to bottom of sidebar)
     st.subheader("System Status")
     
     # Check API keys
@@ -58,7 +145,7 @@ with st.sidebar:
     except:
         st.warning("⚠️ Could not check ffmpeg")
     
-    st.caption("Run `python check_dependencies.py` for full system check")
+        st.caption("Run `python check_dependencies.py` for full system check")
 
 # Submitter information - moved to top
 st.subheader("👤 Submitter Information")
@@ -146,24 +233,6 @@ else:
                     st.session_state.video_url = ''
                     st.rerun()
 
-# Get available rubrics
-available_rubrics = list_available_rubrics()
-rubric_options = {r['name']: r['filename'] for r in available_rubrics}
-rubric_descriptions = {r['name']: r['description'] for r in available_rubrics}
-
-# Rubric selection
-selected_rubric_name = st.selectbox(
-    'Evaluation Rubric',
-    options=list(rubric_options.keys()),
-    help='Choose the rubric to use for evaluation'
-)
-if selected_rubric_name:
-    st.caption(f"📋 {rubric_descriptions[selected_rubric_name]}")
-
-provider = st.selectbox('AI Provider', ['openai','anthropic'])
-translate = st.checkbox('Translate to English', value=True, help='Automatically translate non-English audio to English using Whisper')
-vision = st.checkbox('Enable visual alignment checks')
-
 # Use the file from session state
 uploaded = st.session_state.uploaded_file
 video_url = st.session_state.video_url
@@ -178,10 +247,33 @@ if video_url and video_url.strip():
     except:
         url_is_valid = False
 
+# Initialize session state for analysis tracking
+if 'analyzing' not in st.session_state:
+    st.session_state.analyzing = False
+
+# Initialize session state for storing analysis results
+if 'analysis_results' not in st.session_state:
+    st.session_state.analysis_results = None
+
 # Enable analyze button if either file or valid URL is provided AND required fields are filled
 can_analyze = (uploaded is not None or (video_url and video_url.strip() and url_is_valid)) and first_name.strip() and last_name.strip() and partner_name.strip()
 
-if st.button("🚀 Analyze Video", disabled=not can_analyze, use_container_width=True):
+# Processing options
+st.caption("⚙️ Processing Options")
+translate = st.checkbox('Translate to English', value=True, help='Automatically translate non-English audio to English using Whisper')
+vision = st.checkbox('Enable visual alignment checks')
+
+# Dynamic button text and disabled state
+button_text = "🚀 Analyzing Video..." if st.session_state.analyzing else "🚀 Analyze Video"
+button_disabled = not can_analyze or st.session_state.analyzing
+
+if st.button(button_text, disabled=button_disabled, use_container_width=True, type="primary"):
+    # Clear previous results when starting new analysis
+    st.session_state.analysis_results = None
+    
+    # Set analyzing state
+    st.session_state.analyzing = True
+    
     # Warn user about UI unresponsiveness
     warning_placeholder = st.empty()
     warning_placeholder.warning("⚠️ **Analysis in progress** - The interface may be slow or unresponsive during processing. This is normal and can take several minutes depending on video length and model used for transcription/translation.")
@@ -207,11 +299,11 @@ if st.button("🚀 Analyze Video", disabled=not can_analyze, use_container_width
             elif "Download complete" in message:
                 progress_placeholder.write("⏳ **Step 2/4:** Transcribing audio with Whisper...")
             elif "Transcribing audio" in message:
-                # Extract model name from message like "🎤 Transcribing audio with Whisper base model..."
+                # Extract model and device info from message like "🎤 Transcribing audio with Whisper base model on CPU..."
                 if "Whisper" in message and "model" in message:
                     progress_placeholder.write(f"⏳ **Step 2/4:** {message.replace('🎤 ', '')}")
                 else:
-                    progress_placeholder.write("⏳ **Step 2/4:** Transcribing audio with Whisper base model...")
+                    progress_placeholder.write("⏳ **Step 2/4:** Transcribing audio with Whisper model...")
             elif "Analyzing video frames" in message:
                 progress_placeholder.write("⏳ **Step 3/4:** Analyzing video frames...")
             elif "Evaluating transcript" in message:
@@ -222,9 +314,10 @@ if st.button("🚀 Analyze Video", disabled=not can_analyze, use_container_width
             print(message, flush=True)
         
         evaluator = VideoEvaluator(
+            rubric_path=rubric_filename,
+            api_key=openai_key if provider == 'openai' else anthropic_key,
             provider=prov, 
             enable_vision=vision, 
-            rubric_path=rubric_filename, 
             verbose=False,  # Back to normal - warnings now shown in UI
             progress_callback=ui_progress_callback,
             translate_to_english=translate
@@ -256,12 +349,18 @@ if st.button("🚀 Analyze Video", disabled=not can_analyze, use_container_width
             print("", flush=True)
             print("", flush=True)
         
-        # Add submitter information to results
-        res['submitter'] = {
+        # Reorganize results with submitter information at the top
+        submitter_info = {
             'first_name': first_name.strip(),
             'last_name': last_name.strip(),
             'partner_name': partner_name.strip()
         }
+        
+        # Create new result dictionary with submitter at the top
+        res = {'submitter': submitter_info, **res}
+        
+        # Store results in session state for persistence across reruns
+        st.session_state.analysis_results = res
         
         progress_placeholder.empty()
         status_placeholder.empty()
@@ -270,16 +369,52 @@ if st.button("🚀 Analyze Video", disabled=not can_analyze, use_container_width
         warning_placeholder.empty()
 
         # Display transcription quality first (for reviewer confidence)
-        quality = res.get('quality', {})
-        if quality:
-            quality_rating = quality.get('quality_rating', 'unknown').upper()
-            
-            with st.expander(f"🎤 Transcription Quality: {quality_rating}", expanded=False):
+        
+    except FileNotFoundError as e:
+        st.session_state.analyzing = False
+        warning_placeholder.empty()
+        if 'ffmpeg' in str(e).lower():
+            st.error("❌ ffmpeg not found")
+            st.write("ffmpeg is required for video/audio processing.")
+            st.write("Install with:")
+            st.code("brew install ffmpeg", language="bash")
+        else:
+            st.error(f"File not found: {e}")
+    except Exception as e:
+        st.session_state.analyzing = False
+        warning_placeholder.empty()
+        st.error(f"Error processing video: {e}")
+        st.write("Run `python check_dependencies.py` to verify all dependencies are installed.")
+    finally:
+        # Clean up temp file
+        if tmp:
+            try:
+                import os
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
+
+# Display results if available in session state
+if st.session_state.analysis_results is not None:
+    res = st.session_state.analysis_results
+    
+    quality = res.get('quality', {})
+    if quality:
+        quality_rating = quality.get('quality_rating', 'unknown').upper()
+        
+        with st.expander(f"🎤 Transcription Quality: {quality_rating}", expanded=False):
                 # Check if transcription failed
                 transcript_text = res.get('transcript', '')
                 if transcript_text == "(mock) transcribed text from audio":
                     st.error("❌ **Transcription failed** - Whisper model could not load. Using mock transcript.")
                     st.caption("This usually happens due to memory constraints or missing dependencies.")
+                
+                # Display model and device information
+                whisper_model = res.get('whisper_model', 'unknown')
+                device = res.get('device', 'unknown')
+                device_display = "Apple Silicon GPU (MPS)" if device == "mps" else ("CPU" if device == "cpu" else device.upper())
+                st.write(f"**Model:** Whisper {whisper_model} on {device_display}")
                 
                 # Display detected language
                 language = res.get('language', 'unknown')
@@ -519,7 +654,24 @@ if st.button("🚀 Analyze Video", disabled=not can_analyze, use_container_width
                 # Display each criterion in table format
                 for criterion_id, data in scores.items():
                     criterion_name = criterion_labels.get(criterion_id, criterion_id.replace('_', ' ').title())
-                    score = data.get('score', 'N/A')
+                    original_score = data.get('score', 'N/A')
+                    
+                    # Check for override
+                    override_key = f"override_{criterion_id}"
+                    if override_key in st.session_state.score_overrides and st.session_state.score_overrides[override_key]['enabled']:
+                        score = st.session_state.score_overrides[override_key]['score']
+                        score_display_base = f"{score}"
+                        if not is_new_format:
+                            score_display_base += "/10"
+                        score_display = f"**{score_display_base}** ⚠️ (Overridden from {original_score})"
+                    else:
+                        score = original_score
+                        # Determine max score based on rubric format
+                        if is_new_format:
+                            score_display = f"**{score}**"
+                        else:
+                            score_display = f"**{score}/10**"
+                    
                     confidence = data.get('confidence', 'N/A')
                     note = data.get('note', '')
                     
@@ -534,26 +686,18 @@ if st.button("🚀 Analyze Video", disabled=not can_analyze, use_container_width
                     else:
                         confidence_display = "N/A"
                     
-                    # Determine max score based on rubric format
-                    if is_new_format:
-                        # For new format, we need to look up the max_points from the rubric
-                        # Since we don't have direct access to rubric here, show score only
-                        score_display = f"{score}"
-                    else:
-                        score_display = f"{score}/10"
-                    
                     # Use columns for table-like display
                     col1, col2, col3, col4 = st.columns([3, 1, 1, 2])
                     with col1:
                         st.markdown(f"**{criterion_name}**")
                     with col2:
-                        st.markdown(f"**{score_display}**")
+                        st.markdown(score_display)
                     with col3:
                         st.markdown(confidence_display)
                     with col4:
                         st.caption(note if note else "—")
 
-        st.subheader('📝 Transcript')
+        st.subheader('Transcript')
         with st.expander("**View Full Transcript**", expanded=False):
             st.text(res.get('transcript', ''))
 
@@ -572,8 +716,7 @@ if st.button("🚀 Analyze Video", disabled=not can_analyze, use_container_width
         # Create centered download button for JSON version
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            with open(saved_json_path, 'r') as f:
-                json_content = f.read()
+            json_content = json.dumps(res, indent=2)
             st.download_button(
                 label="📄 Download JSON Report",
                 data=json_content,
@@ -581,28 +724,7 @@ if st.button("🚀 Analyze Video", disabled=not can_analyze, use_container_width
                 mime="application/json",
                 use_container_width=True
             )
-    
-    
-    except FileNotFoundError as e:
-        warning_placeholder.empty()  # Clear warning on error
-        if 'ffmpeg' in str(e).lower():
-            st.error("❌ ffmpeg not found")
-            st.write("ffmpeg is required for video/audio processing.")
-            st.write("Install with:")
-            st.code("brew install ffmpeg", language="bash")
-        else:
-            st.error(f"File not found: {e}")
-    except Exception as e:
-        warning_placeholder.empty()  # Clear warning on error
-        st.error(f"Error processing video: {e}")
-        st.write("Run `python check_dependencies.py` to verify all dependencies are installed.")
-    finally:
-        # Clean up temp file
-        if tmp:
-            try:
-                import os
-                if os.path.exists(tmp):
-                    os.remove(tmp)
-            except Exception:
-                pass
+
+    # Reset analyzing state after successful completion
+    st.session_state.analyzing = False
 

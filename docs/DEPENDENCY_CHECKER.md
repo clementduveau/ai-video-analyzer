@@ -17,9 +17,8 @@ A comprehensive dependency checker that validates:
 
 **Updated Files:**
 
-1. `cli/evaluate_video.py` - Added try/catch for imports with helpful error messages
-2. `app/reviewer.py` - Added dependency check on startup + sidebar status indicator
-3. `README.md` - Added dependency check as step 0 in Quick Start
+1. `app/reviewer.py` - Added dependency check on startup + sidebar status indicator
+2. `README.md` - Added dependency check as step 0 in Quick Start
 
 ## Usage
 
@@ -62,7 +61,6 @@ RESULTS
 The application is ready to use!
 
 Quick start:
-  python cli/evaluate_video.py path/to/demo.mp4 --provider anthropic
   streamlit run app/reviewer.py
 ```
 
@@ -110,7 +108,7 @@ Fix the errors above and run this check again.
 
 **Project Structure Checks:**
 
-- ✓ Verifies key files exist (evaluator, CLI, app, requirements.txt)
+- ✓ Verifies key files exist (evaluator, app, requirements.txt)
 - ✓ Provides clear feedback if files are missing
 
 **Output Categories:**
@@ -123,29 +121,6 @@ Fix the errors above and run this check again.
 
 - 0: All checks passed (or only optional deps missing)
 - 1: Required dependencies missing
-
-### Enhanced CLI (`cli/evaluate_video.py`)
-
-**Import Error Handling:**
-
-```python
-try:
-    from src.video_evaluator import VideoEvaluator, AIProvider
-except ImportError as e:
-    # Shows helpful error message with instructions
-    # Suggests running check_dependencies.py
-    sys.exit(1)
-```
-
-**Runtime Error Handling:**
-
-- Catches ffmpeg not found errors
-- Provides installation instructions
-- Always suggests running dependency checker
-
-**Help Text:**
-
-- Added epilog suggesting dependency check command
 
 ### Enhanced Streamlit App (`app/reviewer.py`)
 
@@ -194,12 +169,11 @@ python check_dependencies.py
 ### Scenario 2: Troubleshooting Failed Execution
 
 ```bash
-# Try to run CLI
-python cli/evaluate_video.py demo.mp4
+# Try to launch Streamlit app
+streamlit run app/reviewer.py
 
-# Get error: ModuleNotFoundError: No module named 'whisper'
-# Error message suggests:
-#   python check_dependencies.py
+# Get error in UI: ModuleNotFoundError: No module named 'whisper'
+# Error message suggests running check_dependencies.py
 
 # Run dependency checker
 python check_dependencies.py
@@ -247,11 +221,7 @@ python check_dependencies.py
 # Exit code: 0
 # Output: ✅ ALL CHECKS PASSED
 
-# Run CLI
-python cli/evaluate_video.py --help
-# Shows help with dependency check suggestion
-
-# Test Streamlit (in browser)
+# Test Streamlit app
 streamlit run app/reviewer.py
 # Sidebar shows: ✓ ffmpeg installed
 ```
@@ -271,7 +241,7 @@ Possible additions:
 ## Summary
 
 ✅ **Dependency checker fully implemented and tested**
-✅ **CLI and Streamlit app enhanced with helpful error messages**
+✅ **Streamlit app enhanced with helpful error messages**
 ✅ **README updated with dependency check instructions**
 ✅ **Works across different computers and environments**
 

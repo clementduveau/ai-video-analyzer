@@ -103,11 +103,11 @@ These metrics make it ideal for testing the evaluation and feedback systems.
 
 ## Usage
 
-### Command Line
+### Streamlit UI
 
 ```bash
-# From project root
-python cli/evaluate_video.py test_data/realistic_demo.wav --provider openai
+streamlit run app/reviewer.py
+# Upload test_data/realistic_demo.wav from file selector
 ```
 
 ### Python API
@@ -128,13 +128,6 @@ print(f"Quality: {result['quality']['quality_rating']}")  # HIGH
 print(f"Confidence: {result['quality']['avg_confidence']:.1f}%")  # 91.8%
 print(f"Score: {result['evaluation']['overall']['weighted_score']:.1f}/10")
 print(f"Feedback: {len(result['feedback']['strengths'])} strengths")  # 2
-```
-
-### Streamlit UI
-
-```bash
-streamlit run app/reviewer.py
-# Upload test_data/realistic_demo.wav from file selector
 ```
 
 ---

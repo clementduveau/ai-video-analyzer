@@ -1,0 +1,25 @@
+services:
+  ai-video-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    volumes:
+      # Mount results directory for persistence
+      - ./results:/app/results
+      # Mount rubrics directory to allow custom rubrics
+      - ./rubrics:/app/rubrics
+      # Mount overrides directory for score override presets
+      - ./overrides:/app/overrides
+      # Optional: Mount environment file for API keys
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONPATH=/app
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    restart: unless-stopped
+    # macOS-specific settings
+    tmpfs:
+      - /tmp:noexec,size=100m

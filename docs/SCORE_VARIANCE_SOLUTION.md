@@ -228,11 +228,12 @@ The only source of variance was the LLM evaluation, now fixed with `temperature=
 To verify consistency improvement, periodically run:
 
 ```bash
-# Test same video 5 times
-for i in {1..5}; do
-  echo "Run $i:"
-  python cli/evaluate_video.py test_data/realistic_demo.wav --provider openai | grep "Overall Score"
-done
+# Test same video 5 times in Streamlit UI
+# 1. Launch: streamlit run app/reviewer.py
+# 2. Upload test_data/realistic_demo.wav
+# 3. Select OpenAI provider
+# 4. Click "Evaluate Video" 5 times
+# 5. Check that all runs show identical scores
 ```
 
 All runs should show identical scores.

@@ -52,22 +52,22 @@ The system calculates overall quality from all segments:
 
 ## Example Output
 
-### CLI Output
+### Streamlit UI Output
 
-```bash
-$ python cli/evaluate_video.py test_data/realistic_demo.wav --provider openai
+The web interface displays transcription quality metrics prominently:
 
-======================================================================
-DEMO VIDEO EVALUATION RESULTS
-======================================================================
+- **Quality Badge:** 🟢 HIGH / 🟡 MEDIUM / 🔴 LOW with color coding
+- **Detailed Metrics:** Confidence percentage, speech detection percentage, compression ratio
+- **Warnings:** Expandable section showing any quality warnings
+- **Quality Impact:** Note about how transcription quality affects evaluation reliability
 
+Example display:
+
+```
 Transcription Quality: 🟢 HIGH
   Confidence: 91.8%
   Speech Detection: 96.7%
   Compression Ratio: 1.48
-
-Overall Score: 6.0/10
-Status: REVISE
 ```
 
 ### JSON Output
@@ -135,17 +135,12 @@ The web interface shows quality metrics prominently:
    - Added `_calculate_transcription_quality()` method
    - Added `quality` field to result dictionary
 
-2. **`cli/evaluate_video.py`** (+14 lines)
+2. **`app/reviewer.py`** (+37 lines)
 
-   - Added quality display section
-   - Color-coded quality rating
-   - Shows warnings if present
-
-3. **`app/reviewer.py`** (+23 lines)
-   - Added quality metrics section
+   - Added quality metrics section in results display
+   - Color-coded quality rating badges
    - Three-column layout for key metrics
-   - Expandable detailed metrics
-   - Warning display
+   - Expandable detailed metrics and warnings
 
 ---
 
@@ -322,7 +317,6 @@ if speech_percentage < 70:
 ✅ **Feature successfully implemented**  
 ✅ **Quality metrics captured from Whisper**  
 ✅ **Summary metrics calculated**  
-✅ **CLI display enhanced**  
 ✅ **Streamlit UI enhanced**  
 ✅ **Warnings generated for issues**  
 ✅ **No breaking changes**

@@ -8,7 +8,7 @@ from src.video_evaluator import VideoEvaluator, AIProvider
 
 
 def test_evaluate_sample_transcript():
-    evaluator = VideoEvaluator(provider=AIProvider.ANTHROPIC, enable_vision=False)
+    evaluator = VideoEvaluator(rubric_path="rubrics/sample-rubric.json", provider=AIProvider.ANTHROPIC, enable_vision=False)
     # Bypass audio processing by calling evaluation directly
     transcript = """This demo shows how to log in, navigate to the dashboard, and create a report. The demo explains the main metrics and how to filter by date."""
     result = evaluator.evaluate_transcript_with_rubric(transcript, segments=[])
@@ -18,7 +18,7 @@ def test_evaluate_sample_transcript():
 
 
 def test_generate_qualitative_feedback():
-    evaluator = VideoEvaluator(provider=AIProvider.OPENAI, enable_vision=False)
+    evaluator = VideoEvaluator(rubric_path="rubrics/default.json", provider=AIProvider.OPENAI, enable_vision=False)
     
     # Create a mock evaluation with passing score
     passing_evaluation = {
@@ -63,7 +63,7 @@ def test_generate_qualitative_feedback():
 
 
 def test_generate_feedback_failing_score():
-    evaluator = VideoEvaluator(provider=AIProvider.ANTHROPIC, enable_vision=False)
+    evaluator = VideoEvaluator(rubric_path="rubrics/sample-rubric.json", provider=AIProvider.ANTHROPIC, enable_vision=False)
     
     # Create a mock evaluation with failing score
     failing_evaluation = {

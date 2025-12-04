@@ -23,6 +23,7 @@ Automatically evaluate demo videos using AI. This project implements a **local-f
 - ✓ Choose between OpenAI or Anthropic models for evaluation
 - ✓ CLI tool for batch processing
 - ✓ Streamlit reviewer app with file upload and URL input
+- ✓ **Docker deployment** (containerized deployment with volume persistence)
 
 ## Architecture
 
@@ -70,7 +71,21 @@ pip install -r requirements.txt
 python check_dependencies.py
 ```
 
-### 3. Set API Keys (Optional)
+### Alternative: Docker Installation (Recommended)
+
+For easier deployment without installing system dependencies locally:
+
+```bash
+# Ensure Docker and docker-compose are installed
+# Then simply run:
+docker-compose up --build
+
+# Access at http://localhost:8501
+```
+
+See [DOCKER_README.md](DOCKER_README.md) for detailed Docker deployment instructions.
+
+### 4. Set API Keys (Optional)
 
 For full LLM evaluation (not needed for basic testing):
 
@@ -78,34 +93,9 @@ For full LLM evaluation (not needed for basic testing):
 export API_KEY=your-openai-or-anthropic-api-key
 ```
 
-### 4. Run Demo
+### 5. Run Demo
 
 ```bash
-# List available rubrics
-python cli/evaluate_video.py --list-rubrics
-
-# Test with pre-generated realistic audio (~90 seconds of actual product demo)
-# This file is included in the repo and ready to use!
-python cli/evaluate_video.py test_data/realistic_demo.wav --provider openai
-
-# Use a specific rubric (sales-demo, technical-demo, or default)
-python cli/evaluate_video.py test_data/realistic_demo.wav --rubric sales-demo --provider openai
-
-# Or test end-to-end without requiring real audio/video
-python test_data/run_end_to_end_demo.py
-
-# Evaluate a real video file (requires ffmpeg + API key)
-python cli/evaluate_video.py path/to/demo.mp4 --provider anthropic
-
-# Evaluate a video from URL (YouTube, Vimeo, or direct links)
-python cli/evaluate_video.py "https://youtube.com/watch?v=..." --provider openai
-
-# Keep original language (disable translation)
-python cli/evaluate_video.py spanish_demo.mp4 --provider openai --no-translate
-
-# With vision analysis
-python cli/evaluate_video.py path/to/demo.mp4 --provider openai --vision
-
 # Launch reviewer UI (with rubric selector, file upload, and URL input)
 streamlit run app/reviewer.py
 ```
@@ -118,18 +108,9 @@ The system supports **multiple evaluation rubrics** for different types of demos
 
 ### Using Rubrics
 
-```bash
-# List all available rubrics
-python cli/evaluate_video.py --list-rubrics
+Use the Streamlit UI to select from available evaluation rubrics. The UI shows all available rubrics with their descriptions and criteria.
 
-# Use a specific rubric
-python cli/evaluate_video.py video.mp4 --rubric sales-demo --provider openai
-
-# Use default rubric (if --rubric not specified)
-python cli/evaluate_video.py video.mp4 --provider openai
-```
-
-The `--list-rubrics` command shows all available rubrics with their descriptions and criteria.
+**In Streamlit UI:** Select rubric from the dropdown in the sidebar before clicking "Analyze"
 
 ### Creating Custom Rubrics
 
@@ -146,24 +127,13 @@ The system supports **99+ languages** through Whisper's automatic language detec
 
 ### Automatic Language Detection
 
-Whisper automatically detects the language of the audio and displays it in both the CLI and UI:
+Whisper automatically detects the language of the audio and displays it in the UI:
 
-- **CLI**: Shows "Detected Language: ES" (or other ISO code)
 - **UI**: Displays in the Transcription Quality expander
 
 ### Translation to English (Default)
 
 **Translation is enabled by default** to ensure consistent English evaluations across all demos.
-
-**CLI:**
-
-```bash
-# Translation enabled by default (no flag needed)
-python cli/evaluate_video.py spanish_demo.mp4 --provider openai
-
-# Disable translation to keep original language
-python cli/evaluate_video.py french_demo.wav --provider openai --no-translate
-```
 
 **UI:**
 
@@ -195,23 +165,12 @@ python cli/evaluate_video.py french_demo.wav --provider openai --no-translate
 
 After each evaluation, results are **automatically saved** to the `results/` folder with timestamps to preserve evaluation history:
 
-### CLI Results
-
-- **Format**: Human-readable text file with full transcript and JSON
-- **Location**: `results/<filename>_results_YYYYMMDD_HHMMSS.txt`
-- **Contents**:
-  - Evaluation summary (status, score, summary)
-  - Transcription quality metrics
-  - Detailed feedback (strengths & improvements)
-  - Full transcript
-  - Complete JSON output
-
 ### UI Results
 
 - **Format**: Human-readable text file
 - **Location**: `results/<filename>_results_YYYYMMDD_HHMMSS.txt`
 - **Download**: Interactive download button in the UI
-- **Contents**: Same as CLI (evaluation summary, quality metrics, feedback, transcript)
+- **Contents**: Evaluation summary, quality metrics, feedback, and transcript
 
 **Note**: JSON export is currently disabled for UI simplicity. See `REMINDER_JSON_EXPORT.md` if you need structured data export for dashboards, APIs, or bulk analysis.
 
@@ -226,20 +185,7 @@ Each evaluation creates a **new timestamped file**, so you can:
 
 **Example**:
 
-```bash
-# After running evaluation
-python cli/evaluate_video.py test_data/realistic_demo.wav --provider openai
-
-# Results saved with timestamp
-# Output: 💾 Results saved to: results/realistic_demo_results_20251010_130222.txt
-
-# Run again - creates a new file instead of overwriting
-python cli/evaluate_video.py test_data/realistic_demo.wav --provider openai
-# Output: 💾 Results saved to: results/realistic_demo_results_20251010_143015.txt
-
-# View all results for this file
-ls results/realistic_demo_results_*.txt
-```
+Use the Streamlit UI to analyze videos. Results are automatically saved with timestamps.
 
 The `results/` directory is git-ignored to avoid committing evaluation outputs.
 
@@ -261,12 +207,10 @@ This feedback is designed to help submitters understand their performance and im
 demo-video-analyzer/
 ├── src/
 │   └── video_evaluator.py    # Core evaluator with rubric logic
-├── cli/
-│   └── evaluate_video.py     # Command-line interface
 ├── app/
 │   └── reviewer.py           # Streamlit reviewer UI
 ├── rubrics/
-│   ├── default.json          # Default rubric for general demos
+│   ├── sample-rubric.json    # Sample rubric for general demos
 │   ├── sales-demo.json       # Sales-focused rubric
 │   ├── technical-demo.json   # Technical deep-dive rubric
 │   └── README.md             # Rubric documentation

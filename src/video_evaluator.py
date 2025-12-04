@@ -254,11 +254,11 @@ def _validate_old_rubric_format(rubric: Dict[str, Any]) -> Tuple[bool, Optional[
 
 
 # Load rubric from file or use default
-def load_rubric(rubric_name: str = "default") -> Dict[str, Any]:
+def load_rubric(rubric_name: str = "sample-rubric") -> Dict[str, Any]:
     """Load rubric from rubrics/{rubric_name}.json, validate it, or fall back to default.
     
     Args:
-        rubric_name: Name of the rubric file (without .json extension). Defaults to "default".
+        rubric_name: Name of the rubric file (without .json extension). Defaults to "sample-rubric".
         
     Returns:
         Dict containing the rubric structure
@@ -283,7 +283,11 @@ def load_rubric(rubric_name: str = "default") -> Dict[str, Any]:
         
         return rubric
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        if rubric_name != "default":
+        if rubric_name == "sample-rubric":
+            # Special fallback: if sample-rubric.json can't be found, try default.json
+            print(f"Warning: Could not load rubric '{rubric_name}' ({e}). Falling back to default.json.")
+            return load_rubric("default")
+        elif rubric_name != "default":
             print(f"Warning: Could not load rubric '{rubric_name}' ({e}). Falling back to default rubric.")
             return load_rubric("default")
         else:
@@ -296,19 +300,21 @@ def list_available_rubrics() -> List[Dict[str, str]]:
     
     Returns:
         List of dicts with 'name', 'filename', and 'description' keys
+        Only includes rubrics with status="current"
     """
     rubrics_dir = Path(__file__).parent.parent / "rubrics"
     available = []
     
     if rubrics_dir.exists():
-        for rubric_file in sorted(rubrics_dir.glob("*.json")):
+        for rubric_file in sorted(rubrics_dir.rglob("*.json")):
             try:
                 with open(rubric_file, 'r') as f:
                     rubric_data = json.load(f)
                 
                 # Validate before adding to list
                 is_valid, _ = validate_rubric(rubric_data)
-                if is_valid:
+                # Only include rubrics marked as current
+                if is_valid and rubric_data.get('status') == 'current':
                     available.append({
                         'filename': rubric_file.stem,
                         'name': rubric_data.get('name', rubric_file.stem),
@@ -317,12 +323,22 @@ def list_available_rubrics() -> List[Dict[str, str]]:
             except (json.JSONDecodeError, Exception):
                 continue
     
-    # Ensure default is always available
-    if not any(r['filename'] == 'default' for r in available):
+    # Handle duplicate names by appending filename in parentheses
+    seen_names = set()
+    for rubric in available:
+        original_name = rubric['name']
+        counter = 1
+        while rubric['name'] in seen_names:
+            rubric['name'] = f"{original_name} ({rubric['filename']})"
+            counter += 1
+        seen_names.add(rubric['name'])
+    
+    # Ensure sample rubric is always available
+    if not any(r['filename'] == 'sample-rubric' for r in available):
         available.insert(0, {
-            'filename': 'default',
-            'name': 'Default Rubric',
-            'description': 'Built-in default rubric'
+            'filename': 'sample-rubric',
+            'name': 'Sample Rubric',
+            'description': 'Built-in sample rubric'
         })
     
     return available
@@ -530,6 +546,7 @@ class VideoEvaluator:
 
         # Load whisper model - medium for optimal multilingual transcription and translation
         self.whisper_model_name = None
+        self.device = "cpu"  # Default device
         if whisper:
             try:
                 # Use medium model for all tasks - it provides the best balance of accuracy and speed for multilingual content
@@ -538,35 +555,67 @@ class VideoEvaluator:
                 # Try MPS (Apple Silicon GPU) first, but load on CPU first to avoid sparse tensor issues
                 try:
                     self.whisper_model = whisper.load_model(model_name, device="cpu")
-                    # Custom MPS placement: move dense tensors to MPS, keep sparse on CPU
-                    self.whisper_model = self._move_model_to_mps_selective(self.whisper_model)
+                    # Test MPS stability before using it
+                    import torch
+                    if torch.backends.mps.is_available():
+                        try:
+                            # Quick stability test: create and use a small tensor
+                            test_tensor = torch.randn(1, 10, device='mps')
+                            test_result = torch.softmax(test_tensor, dim=-1)
+                            if not torch.isnan(test_result).any():
+                                # MPS seems stable, try selective placement
+                                self.whisper_model = self._move_model_to_mps_selective(self.whisper_model)
+                                self.device = "mps"
+                                if self.verbose:
+                                    print(f"✓ Whisper {model_name} model loaded on MPS (Apple Silicon GPU)")
+                            else:
+                                if self.verbose:
+                                    print("Warning: MPS test failed, keeping model on CPU")
+                        except Exception as mps_test_error:
+                            if self.verbose:
+                                print(f"Warning: MPS test failed ({mps_test_error}), keeping model on CPU")
+                    else:
+                        self.device = "cpu"
+                        if self.verbose:
+                            print(f"✓ Whisper {model_name} model loaded on CPU")
                     self.whisper_model_name = model_name
+                    
                 except Exception as e:
                     if self.verbose:
-                        print(f"MPS selective placement failed ({e}), falling back to CPU")
-                    self.whisper_model = whisper.load_model(model_name, device="cpu")
-                    self.whisper_model_name = model_name
-            except Exception:
-                # Fallback - try base if medium fails (better than turbo for translation)
-                try:
-                    self.whisper_model = whisper.load_model("base", device="cpu")
-                    self.whisper_model_name = "base"
-                except Exception:
-                    # Last resort - try turbo (English-only optimized, may not translate well)
+                        print(f"Warning: Failed to load {model_name} model ({e}), trying base model")
+                    
+                    # Fallback - try base if medium fails (better than turbo for translation)
                     try:
-                        self.whisper_model = whisper.load_model("turbo", device="cpu")
-                        self.whisper_model_name = "turbo"
-                    except Exception:
-                        self.whisper_model = None
+                        self.whisper_model = whisper.load_model("base", device="cpu")
+                        self.whisper_model_name = "base"
+                        self.device = "cpu"
+                        if self.verbose:
+                            print("✓ Whisper base model loaded on CPU")
+                    except Exception as base_error:
+                        if self.verbose:
+                            print(f"Warning: Failed to load base model ({base_error}), trying turbo model")
+                        
+                        # Last resort - try turbo (English-only optimized, may not translate well)
+                        try:
+                            self.whisper_model = whisper.load_model("turbo", device="cpu")
+                            self.whisper_model_name = "turbo"
+                            self.device = "cpu"
+                            if self.verbose:
+                                print("✓ Whisper turbo model loaded on CPU")
+                        except Exception as turbo_error:
+                            if self.verbose:
+                                print(f"Error: All Whisper models failed to load. Last error: {turbo_error}")
+                            self.whisper_model = None
+
+            finally:
+                pass
 
         if whisperx:
             try:
-                # Try MPS (Apple Silicon GPU) first for alignment, fallback to CPU
-                try:
-                    self.aligner = whisperx.load_align_model(language_code="en", device="mps")
-                except Exception:
-                    # Fallback to CPU if MPS not available
-                    self.aligner = whisperx.load_align_model(language_code="en", device="cpu")
+                self.aligner = whisperx.load_align_model(language_code="en", device="mps")
+            except Exception:
+                # Fallback to CPU if MPS not available
+                self.aligner = whisperx.load_align_model(language_code="en", device="cpu")
             except Exception:
                 self.aligner = None
         else:
@@ -580,6 +629,7 @@ class VideoEvaluator:
                     return {"text": "(mock) transcribed text from audio", "language": "en", "segments": []}
             self.whisper_model = _FallbackTranscriber()
             self.whisper_model_name = "mock"
+            self.device = "mock"
 
         # Client placeholders
         if provider == AIProvider.OPENAI:
@@ -609,6 +659,15 @@ class VideoEvaluator:
             except Exception as e:
                 if hasattr(self, 'verbose') and self.verbose:
                     print(f"Warning: Could not delete temp directory {self.temp_dir}: {e}")
+
+    def _get_device_display(self) -> str:
+        """Get user-friendly device display name."""
+        if self.device == "mps":
+            return "Apple Silicon GPU (MPS)"
+        elif self.device == "cpu":
+            return "CPU"
+        else:
+            return self.device.upper()
 
     def _report_progress(self, message: str):
         """Report progress message via callback or print if verbose."""
@@ -675,18 +734,61 @@ class VideoEvaluator:
             warnings.filterwarnings('ignore')
         
         # Use whisper for transcription (with optional translation to English)
-        if self.translate_to_english:
-            # First, detect language without translation
-            temp_res = self.whisper_model.transcribe(audio_path)
-            detected_language = temp_res.get('language', 'unknown')
-            
-            # If not English, translate
-            if detected_language and detected_language.lower() != 'en':
-                res = self.whisper_model.transcribe(audio_path, task='translate')
+        def _transcribe_with_fallback(audio_path, task=None):
+            """Transcribe with fallback to CPU if MPS produces NaN values."""
+            try:
+                if task == 'translate':
+                    return self.whisper_model.transcribe(audio_path, task='translate')
+                else:
+                    return self.whisper_model.transcribe(audio_path)
+            except Exception as e:
+                error_msg = str(e)
+                # Check if this is the NaN logits error from MPS
+                if 'nan' in error_msg.lower() and 'logits' in error_msg.lower():
+                    if self.verbose:
+                        print(f"Warning: MPS inference produced NaN values ({e}). Retrying on CPU...")
+                    
+                    # Try to move model to CPU and retry
+                    try:
+                        import torch
+                        # Check if model is currently on MPS
+                        if hasattr(self.whisper_model, 'device') and self.whisper_model.device.type == 'mps':
+                            # Move model to CPU
+                            self.whisper_model = self.whisper_model.to('cpu')
+                            if self.verbose:
+                                print("Model moved to CPU for retry")
+                        
+                        # Retry transcription on CPU
+                        if task == 'translate':
+                            return self.whisper_model.transcribe(audio_path, task='translate')
+                        else:
+                            return self.whisper_model.transcribe(audio_path)
+                            
+                    except Exception as cpu_error:
+                        if self.verbose:
+                            print(f"Warning: CPU retry also failed ({cpu_error})")
+                        raise cpu_error
+                else:
+                    # Re-raise non-NaN errors
+                    raise e
+        
+        try:
+            if self.translate_to_english:
+                # First, detect language without translation
+                temp_res = _transcribe_with_fallback(audio_path)
+                detected_language = temp_res.get('language', 'unknown')
+                
+                # If not English, translate
+                if detected_language and detected_language.lower() != 'en':
+                    res = _transcribe_with_fallback(audio_path, task='translate')
+                else:
+                    res = temp_res  # Already in English
             else:
-                res = temp_res  # Already in English
-        else:
-            res = self.whisper_model.transcribe(audio_path)
+                res = _transcribe_with_fallback(audio_path)
+        except Exception as e:
+            if self.verbose:
+                print(f"Error during transcription: {e}")
+            raise RuntimeError(f"Transcription failed: {e}")
         
         # Re-enable warnings
         if not self.verbose:
@@ -916,6 +1018,54 @@ Transcript excerpt:\n{transcript[:1200]}\n
                 observations.append(f"Frame {i}: visually inspected (heuristic) - no clear mismatch detected")
             return '\n'.join(observations)
 
+    def _chunk_transcript(self, transcript: str, chunk_size: int = 8000, overlap: int = 200) -> List[str]:
+        """Split transcript into overlapping chunks for evaluation of long content.
+        
+        Args:
+            transcript: Full transcript text
+            chunk_size: Maximum characters per chunk
+            overlap: Characters to overlap between chunks
+            
+        Returns:
+            List of transcript chunks
+        """
+        if len(transcript) <= chunk_size:
+            return [transcript]
+        
+        chunks = []
+        start = 0
+        
+        while start < len(transcript):
+            end = start + chunk_size
+            
+            # If we're not at the end, try to find a good break point
+            if end < len(transcript):
+                # Look for sentence endings within the last 200 chars of the chunk
+                break_candidates = []
+                for i in range(max(start, end - 200), end):
+                    if transcript[i] in '.!?\n':
+                        break_candidates.append(i + 1)
+                
+                if break_candidates:
+                    # Use the last sentence break in the overlap region
+                    end = break_candidates[-1]
+                else:
+                    # No good break, just cut at chunk_size
+                    pass
+            
+            chunk = transcript[start:end].strip()
+            if chunk:  # Only add non-empty chunks
+                chunks.append(chunk)
+            
+            # Move start position with overlap
+            start = max(start + 1, end - overlap)
+            
+            # Prevent infinite loop
+            if start >= len(transcript):
+                break
+        
+        return chunks
+
     def evaluate_transcript_with_rubric(self, transcript: str, segments: List[Dict[str, Any]], visual_analysis: Optional[str] = None) -> Dict[str, Any]:
         # Check if rubric uses new format (categories) or old format (criteria)
         is_new_format = "categories" in self.rubric
@@ -938,6 +1088,11 @@ Transcript excerpt:\n{transcript[:1200]}\n
 
     def _evaluate_with_old_rubric_format(self, transcript: str, segments: List[Dict[str, Any]], visual_analysis: Optional[str] = None) -> Dict[str, Any]:
         """Evaluate using old rubric format with flat criteria array."""
+        
+        # Check if transcript is too long - use chunked evaluation
+        if len(transcript) > 4000:
+            return self._evaluate_old_rubric_chunked(transcript, segments, visual_analysis)
+        
         # Build prompt for LLM to produce strict JSON per rubric
         weights = {c['id']: c['weight'] for c in self.rubric['criteria']}
         criteria_desc = "\n".join([f"- {c['id']}: {c['desc']}" for c in self.rubric['criteria']])
@@ -1030,8 +1185,206 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
         status = 'pass' if weighted >= self.rubric['thresholds']['pass'] else ('revise' if weighted >= self.rubric['thresholds']['revise'] else 'fail')
         return {"scores": scores, "overall": {"weighted_score": weighted, "method": self.rubric['overall_method'], "pass_status": status}, "short_summary": "Auto summary"}
 
+    def _evaluate_old_rubric_chunked(self, transcript: str, segments: List[Dict[str, Any]], visual_analysis: Optional[str] = None) -> Dict[str, Any]:
+        """Evaluate long transcripts using old rubric format by breaking them into overlapping chunks."""
+        
+        # Chunk the transcript
+        chunks = self._chunk_transcript(transcript, chunk_size=8000, overlap=200)
+        
+        if self.verbose:
+            print(f"✓ Split transcript into {len(chunks)} chunks for evaluation")
+        
+        # Evaluate each chunk
+        chunk_results = []
+        for i, chunk in enumerate(chunks):
+            if self.verbose:
+                print(f"  Evaluating chunk {i+1}/{len(chunks)}...")
+            
+            try:
+                chunk_result = self._evaluate_single_chunk_old(chunk, i+1, len(chunks), visual_analysis)
+                chunk_results.append(chunk_result)
+            except Exception as e:
+                if self.verbose:
+                    print(f"Warning: Failed to evaluate chunk {i+1} ({e}). Using fallback for this chunk.")
+                
+                # Fallback for this chunk
+                chunk_result = self._fallback_single_chunk_old_evaluation()
+                chunk_results.append(chunk_result)
+        
+        # Aggregate results across chunks
+        return self._aggregate_chunk_results_old(chunk_results)
+
+    def _evaluate_single_chunk_old(self, chunk: str, chunk_num: int, total_chunks: int, visual_analysis: Optional[str] = None) -> Dict[str, Any]:
+        """Evaluate a single transcript chunk using old rubric format."""
+        # Build prompt for LLM to produce strict JSON per rubric
+        weights = {c['id']: c['weight'] for c in self.rubric['criteria']}
+        criteria_desc = "\n".join([f"- {c['id']}: {c['desc']}" for c in self.rubric['criteria']])
+
+        # Dynamically generate the scores schema from rubric
+        scores_schema = ",\n    ".join([
+            f'"{c["id"]}": {{"score": <int 1-10>, "confidence": <int 1-10>, "note": "<justification>"}}'
+            for c in self.rubric['criteria']
+        ])
+
+        prompt = f"""
+You are an expert demo evaluator. Score the following transcript chunk on a 1-10 integer scale for each criterion, provide your confidence level in each score (1-10), and provide a 1-2 sentence justification.
+
+IMPORTANT: This is chunk {chunk_num} of {total_chunks} from a longer transcript. Evaluate based only on the content in this chunk, but consider the context that this is part of a complete demo presentation.
+
+Criteria to evaluate:
+{criteria_desc}
+
+Weights: {weights}
+Thresholds: pass if >= {self.rubric['thresholds']['pass']}, revise if >= {self.rubric['thresholds']['revise']} and < {self.rubric['thresholds']['pass']}, otherwise fail.
+
+For each criterion, provide:
+- score: Your evaluation score (1-10)
+- confidence: How confident you are in this score (1-10, where 10 means very confident)
+- note: Brief justification for your score
+
+Return JSON with this EXACT structure:
+{{
+  "scores": {{
+    {scores_schema}
+  }},
+  "overall": {{
+    "weighted_score": <float>,
+    "method": "weighted_mean",
+    "pass_status": "<pass|revise|fail>"
+  }},
+  "short_summary": "<one sentence summary>"
+}}
+
+Transcript chunk {chunk_num}/{total_chunks}:\n{chunk}
+
+Visual analysis (if any):\n{visual_analysis or 'None'}
+"""
+
+        if self.llm and self.provider == AIProvider.OPENAI:
+            try:
+                client = self.llm.OpenAI(api_key=self.api_key)
+                resp = client.chat.completions.create(
+                    model='gpt-4o-mini',
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=1000,
+                    temperature=0,
+                    response_format={"type": "json_object"}
+                )
+                text = resp.choices[0].message.content
+                if text:
+                    result = json.loads(text)
+                    return result
+            except Exception as e:
+                raise e
+                
+        elif self.llm and self.provider == AIProvider.ANTHROPIC:
+            try:
+                client = self.llm.Anthropic(api_key=self.api_key)
+                resp = client.messages.create(
+                    model='claude-3-5-sonnet-20241022',
+                    max_tokens=1000,
+                    temperature=0,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                result = json.loads(resp.content[0].text)
+                return result
+            except Exception as e:
+                raise e
+        
+        # If we get here, API calls failed
+        raise RuntimeError("All API calls failed for chunk evaluation")
+
+    def _aggregate_chunk_results_old(self, chunk_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Aggregate evaluation results from multiple transcript chunks for old rubric format."""
+        if not chunk_results:
+            # Fallback
+            scores = {}
+            for c in self.rubric['criteria']:
+                scores[c['id']] = {"score": 6, "note": "Auto-generated conservative score"}
+            weighted = sum(scores[c['id']]['score'] * c.get('weight', 0) for c in self.rubric['criteria']) / sum(c.get('weight', 0) for c in self.rubric['criteria'])
+            status = 'pass' if weighted >= self.rubric['thresholds']['pass'] else ('revise' if weighted >= self.rubric['thresholds']['revise'] else 'fail')
+            return {"scores": scores, "overall": {"weighted_score": weighted, "method": self.rubric['overall_method'], "pass_status": status}, "short_summary": "Auto summary"}
+        
+        # Aggregate scores by averaging across chunks
+        aggregated_scores = {}
+        all_criterion_ids = set()
+        
+        # Collect all criterion IDs
+        for result in chunk_results:
+            if 'scores' in result:
+                all_criterion_ids.update(result['scores'].keys())
+        
+        # For each criterion, average the scores across chunks
+        for criterion_id in all_criterion_ids:
+            scores_for_criterion = []
+            confidences_for_criterion = []
+            notes_for_criterion = []
+            
+            for result in chunk_results:
+                if 'scores' in result and criterion_id in result['scores']:
+                    score_data = result['scores'][criterion_id]
+                    scores_for_criterion.append(score_data.get('score', 0))
+                    confidences_for_criterion.append(score_data.get('confidence', 5))
+                    notes_for_criterion.append(score_data.get('note', ''))
+            
+            if scores_for_criterion:
+                # Average score across chunks
+                avg_score = sum(scores_for_criterion) / len(scores_for_criterion)
+                # Use the highest confidence as representative
+                max_confidence = max(confidences_for_criterion) if confidences_for_criterion else 5
+                # Combine notes
+                combined_notes = ' | '.join([note for note in notes_for_criterion if note])
+                
+                aggregated_scores[criterion_id] = {
+                    "score": round(avg_score, 1),
+                    "confidence": max_confidence,
+                    "note": f"Aggregated from {len(scores_for_criterion)} chunks: {combined_notes}"
+                }
+            else:
+                # Fallback if no scores for this criterion
+                aggregated_scores[criterion_id] = {
+                    "score": 6,
+                    "confidence": 3,
+                    "note": "No scores available from chunks"
+                }
+        
+        # Calculate overall weighted score
+        total_weight = sum(c.get('weight', 0) for c in self.rubric['criteria'])
+        if total_weight > 0:
+            weighted_score = sum(aggregated_scores[c['id']]['score'] * c.get('weight', 0) for c in self.rubric['criteria']) / total_weight
+        else:
+            weighted_score = 6.0  # Fallback
+        
+        # Determine pass status
+        status = 'pass' if weighted_score >= self.rubric['thresholds']['pass'] else ('revise' if weighted_score >= self.rubric['thresholds']['revise'] else 'fail')
+        
+        return {
+            "scores": aggregated_scores,
+            "overall": {
+                "weighted_score": round(weighted_score, 1),
+                "method": self.rubric['overall_method'],
+                "pass_status": status
+            },
+            "short_summary": f"Evaluated {len(chunk_results)} transcript chunks with {len(aggregated_scores)} criteria"
+        }
+
+    def _fallback_single_chunk_old_evaluation(self) -> Dict[str, Any]:
+        """Fallback evaluation for a single chunk when API calls fail (old rubric format)."""
+        scores = {}
+        for c in self.rubric['criteria']:
+            scores[c['id']] = {"score": 6, "confidence": 3, "note": "Auto-generated conservative score for chunk"}
+
+        weighted = sum(scores[c['id']]['score'] * c.get('weight', 0) for c in self.rubric['criteria']) / sum(c.get('weight', 0) for c in self.rubric['criteria'])
+        status = 'pass' if weighted >= self.rubric['thresholds']['pass'] else ('revise' if weighted >= self.rubric['thresholds']['revise'] else 'fail')
+        return {"scores": scores, "overall": {"weighted_score": weighted, "method": self.rubric['overall_method'], "pass_status": status}, "short_summary": "Auto summary"}
+
     def _evaluate_simple_rubric(self, transcript: str, segments: List[Dict[str, Any]], visual_analysis: Optional[str] = None) -> Dict[str, Any]:
         """Evaluate using new rubric format with categories and nested criteria (original single-prompt approach)."""
+        
+        # Check if transcript is too long - use chunked evaluation
+        if len(transcript) > 4000:
+            return self._evaluate_transcript_chunked(transcript, segments, visual_analysis)
+        
         # Build prompt for LLM to produce strict JSON per rubric
         categories_desc = []
         scores_schema_parts = []
@@ -1093,7 +1446,7 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
                 resp = client.chat.completions.create(
                     model='gpt-4o-mini',
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=1000,
+                    max_tokens=1200,
                     temperature=0,  # Deterministic output for consistent scoring
                     response_format={"type": "json_object"}
                 )
@@ -1132,8 +1485,269 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
         # fallback: return a conservative heuristic
         return self._fallback_new_rubric_evaluation()
 
+    def _evaluate_transcript_chunked(self, transcript: str, segments: List[Dict[str, Any]], visual_analysis: Optional[str] = None) -> Dict[str, Any]:
+        """Evaluate long transcripts by breaking them into overlapping chunks and aggregating results."""
+        
+        # Chunk the transcript
+        chunks = self._chunk_transcript(transcript, chunk_size=8000, overlap=200)
+        
+        if self.verbose:
+            print(f"✓ Split transcript into {len(chunks)} chunks for evaluation")
+        
+        # Evaluate each chunk
+        chunk_results = []
+        for i, chunk in enumerate(chunks):
+            if self.verbose:
+                print(f"  Evaluating chunk {i+1}/{len(chunks)}...")
+            
+            try:
+                # Use the same rubric evaluation but with chunk indicator
+                chunk_result = self._evaluate_single_chunk(chunk, i+1, len(chunks), visual_analysis)
+                chunk_results.append(chunk_result)
+            except Exception as e:
+                if self.verbose:
+                    print(f"Warning: Failed to evaluate chunk {i+1} ({e}). Using fallback for this chunk.")
+                
+                # Fallback for this chunk
+                chunk_result = self._fallback_single_chunk_evaluation()
+                chunk_results.append(chunk_result)
+        
+        # Aggregate results across chunks
+        return self._aggregate_chunk_results(chunk_results)
+
+    def _evaluate_single_chunk(self, chunk: str, chunk_num: int, total_chunks: int, visual_analysis: Optional[str] = None) -> Dict[str, Any]:
+        """Evaluate a single transcript chunk."""
+        # Build prompt for LLM to produce strict JSON per rubric
+        categories_desc = []
+        scores_schema_parts = []
+
+        for category in self.rubric['categories']:
+            cat_desc = f"- {category['label']} ({category['category_id']}) - {category['max_points']} points max"
+            criteria_desc = []
+            for criterion in category['criteria']:
+                criteria_desc.append(f"  * {criterion['label']} ({criterion['criterion_id']}) - {criterion['max_points']} points max")
+                scores_schema_parts.append(f'"{criterion["criterion_id"]}": {{"score": <int 0-{criterion["max_points"]}>, "confidence": <int 1-10>, "note": "<justification>"}}')
+
+            categories_desc.append(f"{cat_desc}\n" + "\n".join(criteria_desc))
+
+        categories_text = "\n".join(categories_desc)
+        scores_schema = ",\n    ".join(scores_schema_parts)
+
+        prompt = f"""
+You are an expert demo evaluator. Score the following transcript chunk on a point-based scale for each criterion, provide your confidence level in each score (1-10), and provide a justification.
+
+IMPORTANT: This is chunk {chunk_num} of {total_chunks} from a longer transcript. Evaluate based only on the content in this chunk, but consider the context that this is part of a complete demo presentation.
+
+Categories and Criteria to evaluate:
+{categories_text}
+
+Total possible points: {sum(cat['max_points'] for cat in self.rubric['categories'])}
+
+For each criterion, provide:
+- score: Your evaluation score (0-{max(cat['max_points'] for cat in self.rubric['categories'])})
+- confidence: How confident you are in this score (1-10, where 10 means very confident)
+- note: Brief justification for your score
+
+Return JSON with this EXACT structure:
+{{
+  "scores": {{
+    {scores_schema}
+  }},
+  "overall": {{
+    "total_points": <int>,
+    "max_points": {sum(cat['max_points'] for cat in self.rubric['categories'])},
+    "percentage": <float>,
+    "pass_status": "<pass|revise|fail>"
+  }},
+  "categories": {{
+    "category_id": {{
+      "points": <int>,
+      "max_points": <int>,
+      "percentage": <float>
+    }}
+  }},
+  "short_summary": "<one sentence summary>"
+}}
+
+Transcript chunk {chunk_num}/{total_chunks}:\n{chunk}
+
+Visual analysis (if any):\n{visual_analysis or 'None'}
+"""
+
+        if self.llm and self.provider == AIProvider.OPENAI:
+            try:
+                client = self.llm.OpenAI(api_key=self.api_key)
+                resp = client.chat.completions.create(
+                    model='gpt-4o-mini',
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=1000,
+                    temperature=0,
+                    response_format={"type": "json_object"}
+                )
+                text = resp.choices[0].message.content
+                if text:
+                    result = json.loads(text)
+                    return result
+            except Exception as e:
+                raise e
+                
+        elif self.llm and self.provider == AIProvider.ANTHROPIC:
+            try:
+                client = self.llm.Anthropic(api_key=self.api_key)
+                resp = client.messages.create(
+                    model='claude-3-5-haiku-20241022',
+                    max_tokens=1000,
+                    temperature=0,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                result = json.loads(resp.content[0].text)
+                return result
+            except Exception as e:
+                raise e
+        
+        # If we get here, API calls failed
+        raise RuntimeError("All API calls failed for chunk evaluation")
+
+    def _aggregate_chunk_results(self, chunk_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Aggregate evaluation results from multiple transcript chunks."""
+        if not chunk_results:
+            return self._fallback_new_rubric_evaluation()
+        
+        # Aggregate scores by averaging across chunks
+        aggregated_scores = {}
+        all_criterion_ids = set()
+        
+        # Collect all criterion IDs
+        for result in chunk_results:
+            if 'scores' in result:
+                all_criterion_ids.update(result['scores'].keys())
+        
+        # For each criterion, average the scores across chunks
+        for criterion_id in all_criterion_ids:
+            scores_for_criterion = []
+            confidences_for_criterion = []
+            notes_for_criterion = []
+            
+            for result in chunk_results:
+                if 'scores' in result and criterion_id in result['scores']:
+                    score_data = result['scores'][criterion_id]
+                    scores_for_criterion.append(score_data.get('score', 0))
+                    confidences_for_criterion.append(score_data.get('confidence', 5))
+                    notes_for_criterion.append(score_data.get('note', ''))
+            
+            if scores_for_criterion:
+                # Average score across chunks
+                avg_score = sum(scores_for_criterion) / len(scores_for_criterion)
+                # Use the highest confidence as representative
+                max_confidence = max(confidences_for_criterion) if confidences_for_criterion else 5
+                # Combine notes
+                combined_notes = ' | '.join([note for note in notes_for_criterion if note])
+                
+                aggregated_scores[criterion_id] = {
+                    "score": round(avg_score),
+                    "confidence": max_confidence,
+                    "note": f"Aggregated from {len(scores_for_criterion)} chunks: {combined_notes}"
+                }
+            else:
+                # Fallback if no scores for this criterion
+                aggregated_scores[criterion_id] = {
+                    "score": 0,
+                    "confidence": 3,
+                    "note": "No scores available from chunks"
+                }
+        
+        # Aggregate category results
+        categories = {}
+        for category in self.rubric['categories']:
+            category_points = 0
+            total_max_points = category['max_points']
+            
+            # Sum up points for all criteria in this category
+            for criterion in category['criteria']:
+                if criterion['criterion_id'] in aggregated_scores:
+                    category_points += aggregated_scores[criterion['criterion_id']]['score']
+            
+            categories[category['category_id']] = {
+                "points": category_points,
+                "max_points": total_max_points,
+                "percentage": (category_points / total_max_points) * 100 if total_max_points > 0 else 0
+            }
+        
+        # Calculate overall results
+        total_points = sum(cat['points'] for cat in categories.values())
+        max_points = sum(cat['max_points'] for cat in categories.values())
+        percentage = (total_points / max_points) * 100 if max_points > 0 else 0
+        
+        # Use point-based thresholds
+        pass_threshold = self.rubric['thresholds']['pass']
+        revise_threshold = self.rubric['thresholds']['revise']
+        
+        status = 'pass' if total_points >= pass_threshold else ('revise' if total_points >= revise_threshold else 'fail')
+        
+        return {
+            "scores": aggregated_scores,
+            "overall": {
+                "total_points": total_points,
+                "max_points": max_points,
+                "percentage": round(percentage, 1),
+                "pass_status": status
+            },
+            "categories": categories,
+            "short_summary": f"Evaluated {len(chunk_results)} transcript chunks with {len(aggregated_scores)} criteria"
+        }
+
+    def _fallback_single_chunk_evaluation(self) -> Dict[str, Any]:
+        """Fallback evaluation for a single chunk when API calls fail."""
+        scores = {}
+        categories = {}
+        
+        # Generate conservative scores for all criteria
+        for category in self.rubric['categories']:
+            category_points = 0
+            for criterion in category['criteria']:
+                score = int(criterion['max_points'] * 0.6)  # Conservative score
+                scores[criterion['criterion_id']] = {
+                    "score": score,
+                    "confidence": 3,
+                    "note": "Auto-generated conservative score for chunk"
+                }
+                category_points += score
+            
+            categories[category['category_id']] = {
+                "points": category_points,
+                "max_points": category['max_points'],
+                "percentage": (category_points / category['max_points']) * 100
+            }
+        
+        # Calculate overall results
+        total_points = sum(cat['points'] for cat in categories.values())
+        max_points = sum(cat['max_points'] for cat in categories.values())
+        percentage = (total_points / max_points) * 100
+        
+        pass_threshold = self.rubric['thresholds']['pass']
+        revise_threshold = self.rubric['thresholds']['revise']
+        
+        status = 'pass' if total_points >= pass_threshold else ('revise' if total_points >= revise_threshold else 'fail')
+        
+        return {
+            "scores": scores,
+            "overall": {
+                "total_points": total_points,
+                "max_points": max_points,
+                "percentage": round(percentage, 1),
+                "pass_status": status
+            },
+            "categories": categories,
+            "short_summary": "Auto-generated conservative chunk evaluation"
+        }
+
     def _evaluate_complex_rubric_chunked(self, transcript: str, segments: List[Dict[str, Any]], visual_analysis: Optional[str] = None) -> Dict[str, Any]:
         """Evaluate complex rubrics by breaking them into smaller chunks (by category)."""
+        
+        # Check if transcript is too long - use transcript chunking instead
+        if len(transcript) > 4000:
+            return self._evaluate_transcript_chunked(transcript, segments, visual_analysis)
+        
         scores = {}
         categories = {}
         
@@ -1538,7 +2152,8 @@ Return strictly parseable JSON with this exact structure:
                     raise ValueError(f'Unsupported file extension: {ext}')
 
             # Transcribe with timestamps
-            self._report_progress(f"🎤 Transcribing audio with Whisper {self.whisper_model_name} model...")
+            device_display = self._get_device_display()
+            self._report_progress(f"🎤 Transcribing audio with Whisper {self.whisper_model_name} model on {device_display}...")
             transcription = self.transcribe_with_timestamps(audio_path)
 
             # Pick highlights
@@ -1559,15 +2174,18 @@ Return strictly parseable JSON with this exact structure:
 
             result = {
                 'whisper_model': self.whisper_model_name,
+                'device': self.device,
                 'rubric': self.rubric_name,
+                'llm_provider': self.provider.value if hasattr(self.provider, 'value') else str(self.provider),
+                'llm_model': 'gpt-4o-mini' if self.provider == AIProvider.OPENAI else 'claude-3-5-sonnet-20241022',
+                'evaluation': evaluation,
+                'feedback': feedback,
                 'transcript': transcription['text'],
                 'language': transcription.get('language'),
                 'quality': transcription.get('quality'),  # Whisper transcription quality metrics
                 'segments': transcription.get('segments', []),
                 'highlights': highlights,
-                'visual_analysis': visual_analysis,
-                'evaluation': evaluation,
-                'feedback': feedback
+                'visual_analysis': visual_analysis
             }
             return result
         finally:

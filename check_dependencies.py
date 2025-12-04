@@ -118,6 +118,31 @@ class DependencyChecker:
                 module = importlib.import_module(import_name)
                 version = getattr(module, '__version__', 'unknown')
                 self.info.append(f"✓ {package_name}: {version}")
+                
+                # Special check for torch MPS stability
+                if package_name == 'torch':
+                    try:
+                        import torch
+                        if torch.backends.mps.is_available():
+                            # Test MPS stability
+                            test_tensor = torch.randn(1, 10, device='mps')
+                            test_result = torch.softmax(test_tensor, dim=-1)
+                            if torch.isnan(test_result).any():
+                                self.warnings.append(
+                                    "⚠️  MPS (Apple Silicon GPU) test failed - may cause NaN errors during Whisper inference"
+                                )
+                                self.warnings.append(
+                                    "   The application will automatically fall back to CPU if MPS issues occur"
+                                )
+                            else:
+                                self.info.append("✓ MPS (Apple Silicon GPU) stability test passed")
+                        else:
+                            self.info.append("  MPS not available (expected on Intel Macs)")
+                    except Exception as e:
+                        self.warnings.append(
+                            f"⚠️  Could not test MPS stability: {e}"
+                        )
+                        
             except:
                 self.info.append(f"✓ {package_name}: installed")
             return True
