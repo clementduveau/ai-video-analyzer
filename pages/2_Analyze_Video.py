@@ -27,6 +27,41 @@ except ImportError as e:
 
 st.title('Demo Video Analyzer')
 
+# Get available rubrics (refreshed on each page load)
+available_rubrics = list_available_rubrics()
+rubric_options = {r['name']: r['filename'] for r in available_rubrics}
+rubric_descriptions = {r['name']: r['description'] for r in available_rubrics}
+
+# Load configuration and determine default rubric
+config = load_config()
+default_rubric_filename = config.get('default_rubric', 'sample-rubric')  # Default to 'sample-rubric'
+
+# Validate that the configured default rubric still exists
+if default_rubric_filename not in rubric_options.values():
+    # Clear invalid default rubric from config
+    if 'default_rubric' in config:
+        del config['default_rubric']
+        save_config(config)
+    default_rubric_filename = 'sample-rubric'  # Reset to default
+
+# Find the rubric name that corresponds to the default filename
+default_rubric_name = None
+for name, filename in rubric_options.items():
+    if filename == default_rubric_filename:
+        default_rubric_name = name
+        break
+
+# If the configured default doesn't exist, fall back to 'sample-rubric' or the first available
+if not default_rubric_name:
+    if 'sample-rubric' in rubric_options.values():
+        for name, filename in rubric_options.items():
+            if filename == 'sample-rubric':
+                default_rubric_name = name
+                break
+    else:
+        # Fall back to first available rubric
+        default_rubric_name = list(rubric_options.keys())[0] if rubric_options else None
+
 # Hide anchor links on headers to prevent link mouseover
 st.markdown("""
 <style>
@@ -64,40 +99,13 @@ def save_config(config):
     except Exception as e:
         st.error(f"Failed to save configuration: {e}")
 
-# Get available rubrics (needed for rubric management section)
-available_rubrics = list_available_rubrics()
-rubric_options = {r['name']: r['filename'] for r in available_rubrics}
-rubric_descriptions = {r['name']: r['description'] for r in available_rubrics}
-
-# Load configuration and determine default rubric
-config = load_config()
-default_rubric_filename = config.get('default_rubric', 'sample-rubric')  # Default to 'sample-rubric'
-
-# Validate that the configured default rubric still exists
-if default_rubric_filename not in rubric_options.values():
-    # Clear invalid default rubric from config
-    if 'default_rubric' in config:
-        del config['default_rubric']
-        save_config(config)
-    default_rubric_filename = 'sample-rubric'  # Reset to default
-
-# Find the rubric name that corresponds to the default filename
-default_rubric_name = None
-for name, filename in rubric_options.items():
-    if filename == default_rubric_filename:
-        default_rubric_name = name
-        break
-
-# If the configured default doesn't exist, fall back to 'sample-rubric' or the first available
-if not default_rubric_name:
-    if 'sample-rubric' in rubric_options.values():
-        for name, filename in rubric_options.items():
-            if filename == 'sample-rubric':
-                default_rubric_name = name
-                break
-    else:
-        # Fall back to first available rubric
-        default_rubric_name = list(rubric_options.keys())[0] if rubric_options else None
+# Initialize session state for file uploads
+if 'uploaded_file' not in st.session_state:
+    st.session_state.uploaded_file = None
+if 'video_url' not in st.session_state:
+    st.session_state.video_url = ''
+if 'score_overrides' not in st.session_state:
+    st.session_state.score_overrides = {}
 
 # Add dependency check status in sidebar
 with st.sidebar:
