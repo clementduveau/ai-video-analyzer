@@ -93,7 +93,6 @@ Share results with partner
 ### Navigating the Application
 
 1. **Verify System Status**
-
    Ensure the Systems Status in the navigation bar shows required dependencies are set up correctly
 
 2. **Navigate to the Analyze Video page**
@@ -101,17 +100,14 @@ Share results with partner
 3. **Fill out the submitter information**
 
 4. **Select the Input Method**
-
    After selection, navigate to the local file or provide the URL to the demo video
 
 5. **Select Processing Options**
-
    Enable translation from non-English and Visual Alignment checks as needed
 
 6. **Select the rubric to be used for scoring the video**
 
 7. **Start the Analysis**
-
    Click the `Analyze Video` button
 
 
