@@ -273,6 +273,10 @@ if 'analyzing' not in st.session_state:
 if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = None
 
+# Initialize session state for triggering analysis
+if 'start_analysis' not in st.session_state:
+    st.session_state.start_analysis = False
+
 # Enable analyze button if either file or valid URL is provided AND required fields are filled
 can_analyze = (uploaded is not None or (video_url and video_url.strip() and url_is_valid)) and first_name.strip() and last_name.strip() and partner_name.strip()
 
@@ -286,15 +290,22 @@ button_text = "🚀 Analyzing Video..." if st.session_state.analyzing else "🚀
 button_disabled = not can_analyze or st.session_state.analyzing
 
 if st.button(button_text, disabled=button_disabled, use_container_width=True, type="primary"):
+    # Set flags to start analysis
+    st.session_state.start_analysis = True
+    st.session_state.analyzing = True
+    st.rerun()
+
+# Run analysis if start_analysis flag is set
+if st.session_state.start_analysis:
+    # Clear the start_analysis flag
+    st.session_state.start_analysis = False
+    
     # Clear previous results when starting new analysis
     st.session_state.analysis_results = None
     
-    # Set analyzing state
-    st.session_state.analyzing = True
-    
     # Warn user about UI unresponsiveness
     warning_placeholder = st.empty()
-    warning_placeholder.warning("⚠️ **Analysis in progress** - The interface may be slow or unresponsive during processing. This is normal and can take several minutes depending on video length and model used for transcription/translation.")
+    warning_placeholder.warning("⚠️ **Analysis in progress** - The interface may be slow or unresponsive during processing. This is normal and can take several minutes depending on video length and model used for transcription/translation. Halting the application during analysis may also freeze the console while the processes are gracefully shut down and artifacts are cleaned up.")
     
     tmp = None
     try:
@@ -380,6 +391,12 @@ if st.button(button_text, disabled=button_disabled, use_container_width=True, ty
         # Store results in session state for persistence across reruns
         st.session_state.analysis_results = res
         
+        # Reset analyzing state after successful completion
+        st.session_state.analyzing = False
+        
+        # Trigger a rerun to update the button state
+        st.rerun()
+        
         progress_placeholder.empty()
         status_placeholder.empty()
         
@@ -390,6 +407,7 @@ if st.button(button_text, disabled=button_disabled, use_container_width=True, ty
         
     except FileNotFoundError as e:
         st.session_state.analyzing = False
+        st.rerun()
         warning_placeholder.empty()
         if 'ffmpeg' in str(e).lower():
             st.error("❌ ffmpeg not found")
@@ -400,6 +418,7 @@ if st.button(button_text, disabled=button_disabled, use_container_width=True, ty
             st.error(f"File not found: {e}")
     except Exception as e:
         st.session_state.analyzing = False
+        st.rerun()
         warning_placeholder.empty()
         st.error(f"Error processing video: {e}")
         st.write("Run `run.sh check` to verify all dependencies are installed.")

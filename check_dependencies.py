@@ -4,7 +4,8 @@ Dependency checker for the demo video analyzer.
 Run this before using the application to verify all dependencies are installed.
 
 Usage:
-    python check_dependencies.py
+    # Make sure to run in the application's virtual Python environment
+    python3 check_dependencies.py
 """
 import sys
 import subprocess
@@ -262,7 +263,7 @@ class DependencyChecker:
             print()
             print("Quick start:")
             print("  streamlit run Home.py")
-            print("  python test_data/run_end_to_end_demo.py")
+            print("  python tests/run_end_to_end_demo.py")
             print()
             return True
 

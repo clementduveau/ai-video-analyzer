@@ -22,6 +22,4 @@ if [ -f "$PROJECT_DIR/requirements.txt" ]; then
 fi
 
 echo "Virtual environment ready!"
-echo "To activate manually: source venv/bin/activate"
-echo "To run the app: streamlit run app/reviewer.py"
-echo "To run CLI: python cli/evaluate_video.py [args]"
+echo "Please run: ./run.sh check to check dependencies"
