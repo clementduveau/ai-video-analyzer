@@ -20,7 +20,7 @@ except ImportError as e:
     st.write(f"Error: {e}")
     st.write("")
     st.write("To check which dependencies are missing, run:")
-    st.code("python check_dependencies.py", language="bash")
+    st.code("run.sh check", language="bash")
     st.write("To install all dependencies:")
     st.code("pip install -r requirements.txt", language="bash")
     st.stop()
@@ -31,6 +31,28 @@ st.title('Demo Video Analyzer')
 available_rubrics = list_available_rubrics()
 rubric_options = {r['name']: r['filename'] for r in available_rubrics}
 rubric_descriptions = {r['name']: r['description'] for r in available_rubrics}
+
+# Configuration management for default rubric
+CONFIG_FILE = Path(__file__).parent.parent / ".streamlit_config.json"
+
+def load_config():
+    """Load configuration from file."""
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_config(config):
+    """Save configuration to file."""
+    try:
+        CONFIG_FILE.parent.mkdir(exist_ok=True)
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except Exception as e:
+        st.error(f"Failed to save configuration: {e}")
 
 # Load configuration and determine default rubric
 config = load_config()
@@ -76,28 +98,6 @@ h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
 }
 </style>
 """, unsafe_allow_html=True)
-
-# Configuration management for default rubric
-CONFIG_FILE = Path(__file__).parent.parent / ".streamlit_config.json"
-
-def load_config():
-    """Load configuration from file."""
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            pass
-    return {}
-
-def save_config(config):
-    """Save configuration to file."""
-    try:
-        CONFIG_FILE.parent.mkdir(exist_ok=True)
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-    except Exception as e:
-        st.error(f"Failed to save configuration: {e}")
 
 # Initialize session state for file uploads
 if 'uploaded_file' not in st.session_state:
@@ -161,7 +161,7 @@ with st.sidebar:
     except:
         st.warning("⚠️ Could not check ffmpeg")
     
-        st.caption("Run `python check_dependencies.py` for full system check")
+        st.caption("Run `run.sh check` for full system check")
 
 # Submitter information - moved to top
 st.subheader("👤 Submitter Information")
@@ -402,7 +402,7 @@ if st.button(button_text, disabled=button_disabled, use_container_width=True, ty
         st.session_state.analyzing = False
         warning_placeholder.empty()
         st.error(f"Error processing video: {e}")
-        st.write("Run `python check_dependencies.py` to verify all dependencies are installed.")
+        st.write("Run `run.sh check` to verify all dependencies are installed.")
     finally:
         # Clean up temp file
         if tmp:
