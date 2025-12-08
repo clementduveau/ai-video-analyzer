@@ -19,7 +19,8 @@ case "$1" in
     "app"|"web"|"streamlit")
         activate_venv
         echo "Starting Streamlit app..."
-        streamlit run Home.py
+        shift  # Remove "app" from arguments
+        streamlit run Home.py "$@"
         ;;
     "test")
         activate_venv
@@ -29,17 +30,17 @@ case "$1" in
     "demo")
         activate_venv
         echo "Running end-to-end demo..."
-        python test_data/run_end_to_end_demo.py
+        python tests/run_end_to_end_demo.py
         ;;
     "check")
         activate_venv
         echo "Running dependency check..."
-        python check_dependencies.py
+        python3 check_dependencies.py
         ;;
     "chunking-test")
         activate_venv
         echo "Testing chunking evaluation fixes..."
-        python test_chunking_fix.py
+        python tests/test_chunking_fix.py
         ;;
     *)
         echo "Usage: $0 {app|test|demo|check|chunking-test}"

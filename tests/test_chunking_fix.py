@@ -7,7 +7,7 @@ Make sure to set API keys in .env file first.
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from dotenv import load_dotenv
 from src.video_evaluator import VideoEvaluator, AIProvider

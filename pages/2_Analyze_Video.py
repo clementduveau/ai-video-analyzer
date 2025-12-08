@@ -20,7 +20,7 @@ except ImportError as e:
     st.write(f"Error: {e}")
     st.write("")
     st.write("To check which dependencies are missing, run:")
-    st.code("python check_dependencies.py", language="bash")
+    st.code("run.sh check", language="bash")
     st.write("To install all dependencies:")
     st.code("pip install -r requirements.txt", language="bash")
     st.stop()
@@ -53,6 +53,28 @@ def save_config(config):
 available_rubrics = list_available_rubrics()
 rubric_options = {r['name']: r['filename'] for r in available_rubrics}
 rubric_descriptions = {r['name']: r['description'] for r in available_rubrics}
+
+# Configuration management for default rubric
+CONFIG_FILE = Path(__file__).parent.parent / ".streamlit_config.json"
+
+def load_config():
+    """Load configuration from file."""
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_config(config):
+    """Save configuration to file."""
+    try:
+        CONFIG_FILE.parent.mkdir(exist_ok=True)
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except Exception as e:
+        st.error(f"Failed to save configuration: {e}")
 
 # Load configuration and determine default rubric
 config = load_config()
@@ -98,7 +120,6 @@ h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
 }
 </style>
 """, unsafe_allow_html=True)
-
 
 # Initialize session state for file uploads
 if 'uploaded_file' not in st.session_state:
@@ -162,7 +183,7 @@ with st.sidebar:
     except:
         st.warning("⚠️ Could not check ffmpeg")
     
-        st.caption("Run `python check_dependencies.py` for full system check")
+        st.caption("Run `run.sh check` for full system check")
 
 # Submitter information - moved to top
 st.subheader("👤 Submitter Information")
@@ -274,6 +295,10 @@ if 'analyzing' not in st.session_state:
 if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = None
 
+# Initialize session state for triggering analysis
+if 'start_analysis' not in st.session_state:
+    st.session_state.start_analysis = False
+
 # Enable analyze button if either file or valid URL is provided AND required fields are filled
 can_analyze = (uploaded is not None or (video_url and video_url.strip() and url_is_valid)) and first_name.strip() and last_name.strip() and partner_name.strip()
 
@@ -298,15 +323,22 @@ button_text = "🚀 Analyzing Video..." if st.session_state.analyzing else "🚀
 button_disabled = not can_analyze or st.session_state.analyzing
 
 if st.button(button_text, disabled=button_disabled, use_container_width=True, type="primary"):
+    # Set flags to start analysis
+    st.session_state.start_analysis = True
+    st.session_state.analyzing = True
+    st.rerun()
+
+# Run analysis if start_analysis flag is set
+if st.session_state.start_analysis:
+    # Clear the start_analysis flag
+    st.session_state.start_analysis = False
+    
     # Clear previous results when starting new analysis
     st.session_state.analysis_results = None
     
-    # Set analyzing state
-    st.session_state.analyzing = True
-    
     # Warn user about UI unresponsiveness
     warning_placeholder = st.empty()
-    warning_placeholder.warning("⚠️ **Analysis in progress** - The interface may be slow or unresponsive during processing. This is normal and can take several minutes depending on video length and model used for transcription/translation.")
+    warning_placeholder.warning("⚠️ **Analysis in progress** - The interface may be slow or unresponsive during processing. This is normal and can take several minutes depending on video length and model used for transcription/translation. Halting the application during analysis may also freeze the console while the processes are gracefully shut down and artifacts are cleaned up.")
     
     tmp = None
     try:
@@ -399,6 +431,12 @@ if st.button(button_text, disabled=button_disabled, use_container_width=True, ty
         # Store results in session state for persistence across reruns
         st.session_state.analysis_results = res
         
+        # Reset analyzing state after successful completion
+        st.session_state.analyzing = False
+        
+        # Trigger a rerun to update the button state
+        st.rerun()
+        
         progress_placeholder.empty()
         status_placeholder.empty()
         
@@ -409,6 +447,7 @@ if st.button(button_text, disabled=button_disabled, use_container_width=True, ty
         
     except FileNotFoundError as e:
         st.session_state.analyzing = False
+        st.rerun()
         warning_placeholder.empty()
         if 'ffmpeg' in str(e).lower():
             st.error("❌ ffmpeg not found")
@@ -419,9 +458,10 @@ if st.button(button_text, disabled=button_disabled, use_container_width=True, ty
             st.error(f"File not found: {e}")
     except Exception as e:
         st.session_state.analyzing = False
+        st.rerun()
         warning_placeholder.empty()
         st.error(f"Error processing video: {e}")
-        st.write("Run `python check_dependencies.py` to verify all dependencies are installed.")
+        st.write("Run `run.sh check` to verify all dependencies are installed.")
     finally:
         # Clean up temp file
         if tmp:

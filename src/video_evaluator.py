@@ -985,24 +985,24 @@ class VideoEvaluator:
         # lightweight summary via heuristic: first 3 lines or use LLM if available
         if self.llm and self.provider == AIProvider.OPENAI:
             try:
-                client = self.llm.OpenAI(api_key=self.api_key)
-                resp = client.chat.completions.create(
-                    model='gpt-4o',
-                    messages=[{"role": "user", "content": f"Summarize the following transcript in 3 sentences:\n\n{transcript}"}],
-                    max_tokens=200
-                )
-                return resp.choices[0].message.content
+                with self.llm.OpenAI(api_key=self.api_key) as client:
+                    resp = client.chat.completions.create(
+                        model='gpt-4o',
+                        messages=[{"role": "user", "content": f"Summarize the following transcript in 3 sentences:\n\n{transcript}"}],
+                        max_tokens=200
+                    )
+                    return resp.choices[0].message.content
             except Exception:
                 pass
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                client = self.llm.Anthropic(api_key=self.api_key)
-                resp = client.messages.create(
-                    model='claude-3-5-haiku-20241022',
-                    max_tokens=200,
-                    messages=[{"role": "user", "content": f"Summarize the following transcript in 3 sentences:\n\n{transcript}"}]
-                )
-                return resp.content[0].text
+                with self.llm.Anthropic(api_key=self.api_key) as client:
+                    resp = client.messages.create(
+                        model='claude-3-5-haiku-20241022',
+                        max_tokens=200,
+                        messages=[{"role": "user", "content": f"Summarize the following transcript in 3 sentences:\n\n{transcript}"}]
+                    )
+                    return resp.content[0].text
             except Exception:
                 pass
         # fallback: simple trim
@@ -1052,17 +1052,17 @@ Transcript excerpt:\n{transcript[:1200]}\n
                 content: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
                 for img in frames[:5]:
                     content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}})
-                client = self.llm.OpenAI(api_key=self.api_key)
-                resp = client.chat.completions.create(model='gpt-4o', messages=[{"role": "user", "content": content}], max_tokens=300)
-                return resp.choices[0].message.content
+                with self.llm.OpenAI(api_key=self.api_key) as client:
+                    resp = client.chat.completions.create(model='gpt-4o', messages=[{"role": "user", "content": content}], max_tokens=300)
+                    return resp.choices[0].message.content
             else:
                 # Anthropic style (simplified)
                 message: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
                 for img in frames[:5]:
                     message.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img}})
-                client = self.llm.Anthropic(api_key=self.api_key)
-                resp = client.messages.create(model='claude-3', messages=[{"role": "user", "content": message}])
-                return resp.content[0].text
+                with self.llm.Anthropic(api_key=self.api_key) as client:
+                    resp = client.messages.create(model='claude-3', messages=[{"role": "user", "content": message}])
+                    return resp.content[0].text
         except Exception:
             # fallback to heuristic
             observations = []
@@ -1189,20 +1189,20 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
 
         if self.llm and self.provider == AIProvider.OPENAI:
             try:
-                client = self.llm.OpenAI(api_key=self.api_key)
-                resp = client.chat.completions.create(
-                    model='gpt-4o-mini',
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=800,
-                    temperature=0,  # Deterministic output for consistent scoring
-                    response_format={"type": "json_object"}
-                )
-                # attempt to parse JSON from response
-                text = resp.choices[0].message.content
-                result = json.loads(text)
-                if self.verbose:
-                    print(f"✓ OpenAI evaluation successful")
-                return result
+                with self.llm.OpenAI(api_key=self.api_key) as client:
+                    resp = client.chat.completions.create(
+                        model='gpt-4o-mini',
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=800,
+                        temperature=0,  # Deterministic output for consistent scoring
+                        response_format={"type": "json_object"}
+                    )
+                    # attempt to parse JSON from response
+                    text = resp.choices[0].message.content
+                    result = json.loads(text)
+                    if self.verbose:
+                        print(f"✓ OpenAI evaluation successful")
+                    return result
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: OpenAI API call failed ({e}). Using fallback evaluation.")
@@ -1212,17 +1212,17 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                client = self.llm.Anthropic(api_key=self.api_key)
-                resp = client.messages.create(
-                    model='claude-3-5-haiku-20241022',
-                    max_tokens=800,
-                    temperature=0,  # Deterministic output for consistent scoring
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                result = json.loads(resp.content[0].text)
-                if self.verbose:
-                    print(f"✓ Anthropic evaluation successful")
-                return result
+                with self.llm.Anthropic(api_key=self.api_key) as client:
+                    resp = client.messages.create(
+                        model='claude-3-5-haiku-20241022',
+                        max_tokens=800,
+                        temperature=0,  # Deterministic output for consistent scoring
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    result = json.loads(resp.content[0].text)
+                    if self.verbose:
+                        print(f"✓ Anthropic evaluation successful")
+                    return result
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: Anthropic API call failed ({e}). Using fallback.")
@@ -1314,31 +1314,31 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
 
         if self.llm and self.provider == AIProvider.OPENAI:
             try:
-                client = self.llm.OpenAI(api_key=self.api_key)
-                resp = client.chat.completions.create(
-                    model='gpt-4o-mini',
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=1000,
-                    temperature=0,
-                    response_format={"type": "json_object"}
-                )
-                text = resp.choices[0].message.content
-                if text:
-                    result = json.loads(text)
-                    return result
+                with self.llm.OpenAI(api_key=self.api_key) as client:
+                    resp = client.chat.completions.create(
+                        model='gpt-4o-mini',
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=1000,
+                        temperature=0,
+                        response_format={"type": "json_object"}
+                    )
+                    text = resp.choices[0].message.content
+                    if text:
+                        result = json.loads(text)
+                        return result
             except Exception as e:
                 raise e
                 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                client = self.llm.Anthropic(api_key=self.api_key)
-                resp = client.messages.create(
-                    model='claude-3-5-haiku-20241022',
-                    max_tokens=1000,
-                    temperature=0,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                result = json.loads(resp.content[0].text)
+                with self.llm.Anthropic(api_key=self.api_key) as client:
+                    resp = client.messages.create(
+                        model='claude-3-5-haiku-20241022',
+                        max_tokens=1000,
+                        temperature=0,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    result = json.loads(resp.content[0].text)
                 return result
             except Exception as e:
                 raise e
@@ -1494,21 +1494,21 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
 
         if self.llm and self.provider == AIProvider.OPENAI:
             try:
-                client = self.llm.OpenAI(api_key=self.api_key)
-                resp = client.chat.completions.create(
-                    model='gpt-4o-mini',
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=1200,
-                    temperature=0,  # Deterministic output for consistent scoring
-                    response_format={"type": "json_object"}
-                )
-                # attempt to parse JSON from response
-                text = resp.choices[0].message.content
-                if text:
-                    result = json.loads(text)
-                    if self.verbose:
-                        print(f"✓ OpenAI evaluation successful")
-                    return result
+                with self.llm.OpenAI(api_key=self.api_key) as client:
+                    resp = client.chat.completions.create(
+                        model='gpt-4o-mini',
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=1200,
+                        temperature=0,  # Deterministic output for consistent scoring
+                        response_format={"type": "json_object"}
+                    )
+                    # attempt to parse JSON from response
+                    text = resp.choices[0].message.content
+                    if text:
+                        result = json.loads(text)
+                        if self.verbose:
+                            print(f"✓ OpenAI evaluation successful")
+                        return result
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: OpenAI API call failed ({e}). Using fallback evaluation.")
@@ -1518,17 +1518,17 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                client = self.llm.Anthropic(api_key=self.api_key)
-                resp = client.messages.create(
-                    model='claude-3-5-haiku-20241022',
-                    max_tokens=1000,
-                    temperature=0,  # Deterministic output for consistent scoring
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                result = json.loads(resp.content[0].text)
-                if self.verbose:
-                    print(f"✓ Anthropic evaluation successful")
-                return result
+                with self.llm.Anthropic(api_key=self.api_key) as client:
+                    resp = client.messages.create(
+                        model='claude-3-5-haiku-20241022',
+                        max_tokens=1000,
+                        temperature=0,  # Deterministic output for consistent scoring
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    result = json.loads(resp.content[0].text)
+                    if self.verbose:
+                        print(f"✓ Anthropic evaluation successful")
+                    return result
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: Anthropic API call failed ({e}). Using fallback.")
@@ -1715,18 +1715,18 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
 
         if self.llm and self.provider == AIProvider.OPENAI:
             try:
-                client = self.llm.OpenAI(api_key=self.api_key)
-                resp = client.chat.completions.create(
-                    model='gpt-4o-mini',
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=800,
-                    temperature=0,
-                    response_format={"type": "json_object"}
-                )
-                text = resp.choices[0].message.content
-                if text:
-                    result = json.loads(text)
-                    return result
+                with self.llm.OpenAI(api_key=self.api_key) as client:
+                    resp = client.chat.completions.create(
+                        model='gpt-4o-mini',
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=800,
+                        temperature=0,
+                        response_format={"type": "json_object"}
+                    )
+                    text = resp.choices[0].message.content
+                    if text:
+                        result = json.loads(text)
+                        return result
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: OpenAI API call failed for category {category['label']} in chunk {chunk_num} ({e}). Using fallback.")
@@ -1734,31 +1734,31 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
                 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                client = self.llm.Anthropic(api_key=self.api_key)
-                resp = client.messages.create(
-                    model='claude-3-5-haiku-20241022',
-                    max_tokens=800,
-                    temperature=0,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                if resp.content and len(resp.content) > 0 and hasattr(resp.content[0], 'text'):
-                    text = resp.content[0].text
-                    if text:
-                        try:
-                            result = json.loads(text)
-                            return result
-                        except json.JSONDecodeError as e:
+                with self.llm.Anthropic(api_key=self.api_key) as client:
+                    resp = client.messages.create(
+                        model='claude-3-5-haiku-20241022',
+                        max_tokens=800,
+                        temperature=0,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    if resp.content and len(resp.content) > 0 and hasattr(resp.content[0], 'text'):
+                        text = resp.content[0].text
+                        if text:
+                            try:
+                                result = json.loads(text)
+                                return result
+                            except json.JSONDecodeError as e:
+                                if self.verbose:
+                                    print(f"Warning: Failed to parse JSON response for category {category['label']}: {e}")
+                                    print(f"Raw response text: {text[:500]}...")
+                                raise e
+                        else:
                             if self.verbose:
-                                print(f"Warning: Failed to parse JSON response for category {category['label']}: {e}")
-                                print(f"Raw response text: {text[:500]}...")
-                            raise e
+                                print(f"Warning: Anthropic response text is empty for category {category['label']} in chunk {chunk_num}")
                     else:
                         if self.verbose:
-                            print(f"Warning: Anthropic response text is empty for category {category['label']} in chunk {chunk_num}")
-                else:
-                    if self.verbose:
-                        print(f"Warning: Anthropic response missing content or text for category {category['label']} in chunk {chunk_num}")
-                        print(f"Response content: {resp.content}")
+                            print(f"Warning: Anthropic response missing content or text for category {category['label']} in chunk {chunk_num}")
+                            print(f"Response content: {resp.content}")
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: Anthropic API call failed for category {category['label']} in chunk {chunk_num} ({e}). Using fallback.")
@@ -1839,18 +1839,18 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
 
         if self.llm and self.provider == AIProvider.OPENAI:
             try:
-                client = self.llm.OpenAI(api_key=self.api_key)
-                resp = client.chat.completions.create(
-                    model='gpt-4o-mini',
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=1000,
-                    temperature=0,
-                    response_format={"type": "json_object"}
-                )
-                text = resp.choices[0].message.content
-                if text:
-                    result = json.loads(text)
-                    return result
+                with self.llm.OpenAI(api_key=self.api_key) as client:
+                    resp = client.chat.completions.create(
+                        model='gpt-4o-mini',
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=1000,
+                        temperature=0,
+                        response_format={"type": "json_object"}
+                    )
+                    text = resp.choices[0].message.content
+                    if text:
+                        result = json.loads(text)
+                        return result
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: OpenAI API call failed for chunk {chunk_num} ({e}). Using fallback.")
@@ -1858,15 +1858,15 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
                 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                client = self.llm.Anthropic(api_key=self.api_key)
-                resp = client.messages.create(
-                    model='claude-3-5-haiku-20241022',
-                    max_tokens=1000,
-                    temperature=0,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                result = json.loads(resp.content[0].text)
-                return result
+                with self.llm.Anthropic(api_key=self.api_key) as client:
+                    resp = client.messages.create(
+                        model='claude-3-5-haiku-20241022',
+                        max_tokens=1000,
+                        temperature=0,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    result = json.loads(resp.content[0].text)
+                    return result
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: Anthropic API call failed for chunk {chunk_num} ({e}). Using fallback.")
@@ -2097,18 +2097,18 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
 
         if self.llm and self.provider == AIProvider.OPENAI:
             try:
-                client = self.llm.OpenAI(api_key=self.api_key)
-                resp = client.chat.completions.create(
-                    model='gpt-4o-mini',
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=800,
-                    temperature=0,
-                    response_format={"type": "json_object"}
-                )
-                text = resp.choices[0].message.content
-                if text:
-                    result = json.loads(text)
-                    return result
+                with self.llm.OpenAI(api_key=self.api_key) as client:
+                    resp = client.chat.completions.create(
+                        model='gpt-4o-mini',
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=800,
+                        temperature=0,
+                        response_format={"type": "json_object"}
+                    )
+                    text = resp.choices[0].message.content
+                    if text:
+                        result = json.loads(text)
+                        return result
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: OpenAI API call failed for category {category['label']} ({e}). Using fallback.")
@@ -2116,15 +2116,15 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
                 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                client = self.llm.Anthropic(api_key=self.api_key)
-                resp = client.messages.create(
-                    model='claude-3-5-haiku-20241022',
-                    max_tokens=800,
-                    temperature=0,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                result = json.loads(resp.content[0].text)
-                return result
+                with self.llm.Anthropic(api_key=self.api_key) as client:
+                    resp = client.messages.create(
+                        model='claude-3-5-haiku-20241022',
+                        max_tokens=800,
+                        temperature=0,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    result = json.loads(resp.content[0].text)
+                    return result
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: Anthropic API call failed for category {category['label']} ({e}). Using fallback.")
@@ -2301,19 +2301,19 @@ Return strictly parseable JSON with this exact structure:
 
         if self.llm and self.provider == AIProvider.OPENAI:
             try:
-                client = self.llm.OpenAI(api_key=self.api_key)
-                resp = client.chat.completions.create(
-                    model='gpt-4o-mini',
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=1000,
-                    temperature=0,  # Deterministic output for consistent feedback
-                    response_format={"type": "json_object"}
-                )
-                text = resp.choices[0].message.content
-                if text:
-                    feedback_data = json.loads(text)
-                    feedback_data['tone'] = tone
-                    return feedback_data
+                with self.llm.OpenAI(api_key=self.api_key) as client:
+                    resp = client.chat.completions.create(
+                        model='gpt-4o-mini',
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=1000,
+                        temperature=0,  # Deterministic output for consistent feedback
+                        response_format={"type": "json_object"}
+                    )
+                    text = resp.choices[0].message.content
+                    if text:
+                        feedback_data = json.loads(text)
+                        feedback_data['tone'] = tone
+                        return feedback_data
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: OpenAI API call failed for feedback ({e}). Using fallback.")
@@ -2321,20 +2321,20 @@ Return strictly parseable JSON with this exact structure:
         
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                client = self.llm.Anthropic(api_key=self.api_key)
-                resp = client.messages.create(
-                    model='claude-3-5-haiku-20241022',
-                    max_tokens=1000,
-                    temperature=0,  # Deterministic output for consistent feedback
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                # Handle Anthropic response format
-                if hasattr(resp, 'content') and resp.content:
-                    content = resp.content[0]
-                    if hasattr(content, 'text'):
-                        feedback_data = json.loads(content.text)
-                        feedback_data['tone'] = tone
-                        return feedback_data
+                with self.llm.Anthropic(api_key=self.api_key) as client:
+                    resp = client.messages.create(
+                        model='claude-3-5-haiku-20241022',
+                        max_tokens=1000,
+                        temperature=0,  # Deterministic output for consistent feedback
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    # Handle Anthropic response format
+                    if hasattr(resp, 'content') and resp.content:
+                        content = resp.content[0]
+                        if hasattr(content, 'text'):
+                            feedback_data = json.loads(content.text)
+                            feedback_data['tone'] = tone
+                            return feedback_data
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: Anthropic API call failed for feedback ({e}). Using fallback.")

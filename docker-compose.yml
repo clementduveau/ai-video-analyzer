@@ -1,5 +1,5 @@
 services:
-  ai-video-analyzer:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -21,8 +21,9 @@ services:
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_SERVER_PORT=8501
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_RUN_ON_SAVE=false
       - TORCH_VARIANT=${TORCH_VARIANT:-cpu}
-    restart: unless-stopped
+    restart: on-failure
     # macOS-specific settings
     tmpfs:
       - /tmp:noexec,size=100m

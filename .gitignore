@@ -25,6 +25,10 @@ htmlcov/
 *.swp
 *.swo
 *~
+.github/
+
+# Streamlit
+.streamlit/
 
 # OS
 .DS_Store
@@ -44,7 +48,7 @@ temp/
 *.key
 
 # Output files
-output/
+overrides/
 results/
 *.json.bak
 
