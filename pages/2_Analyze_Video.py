@@ -11,6 +11,7 @@ import streamlit as st
 import json
 from pathlib import Path
 from datetime import datetime
+import traceback
 
 # Check for dependencies
 try:
@@ -128,6 +129,12 @@ if 'video_url' not in st.session_state:
     st.session_state.video_url = ''
 if 'score_overrides' not in st.session_state:
     st.session_state.score_overrides = {}
+if 'last_error' not in st.session_state:
+    st.session_state.last_error = None
+if 'analyzing' not in st.session_state:
+    st.session_state.analyzing = False
+if 'start_analysis' not in st.session_state:
+    st.session_state.start_analysis = False
 
 # Add dependency check status in sidebar
 with st.sidebar:
@@ -184,6 +191,16 @@ with st.sidebar:
         st.warning("⚠️ Could not check ffmpeg")
     
         st.caption("Run `run.sh check` for full system check")
+
+# Display persistent errors if any
+if st.session_state.get('last_error'):
+    st.error("❌ **Previous analysis failed with error:**")
+    with st.expander("🔍 View error details", expanded=True):
+        st.code(st.session_state.last_error)
+    if st.button("Clear Error", type="secondary"):
+        st.session_state.last_error = None
+        st.rerun()
+    st.divider()
 
 # Submitter information - moved to top
 st.subheader("👤 Submitter Information")
@@ -323,10 +340,10 @@ button_text = "🚀 Analyzing Video..." if st.session_state.analyzing else "🚀
 button_disabled = not can_analyze or st.session_state.analyzing
 
 if st.button(button_text, disabled=button_disabled, use_container_width=True, type="primary"):
-    # Set flags to start analysis
+    # Set flags to start analysis - DO NOT rerun here, let analysis execute in same script run
     st.session_state.start_analysis = True
     st.session_state.analyzing = True
-    st.rerun()
+    # REMOVED st.rerun() - this was causing the browser focus bug
 
 # Run analysis if start_analysis flag is set
 if st.session_state.start_analysis:
@@ -335,6 +352,16 @@ if st.session_state.start_analysis:
     
     # Clear previous results when starting new analysis
     st.session_state.analysis_results = None
+    
+    # Log analysis start to console for debugging
+    print("\n" + "="*70, flush=True)
+    print("🚀 STARTING VIDEO ANALYSIS", flush=True)
+    print("="*70, flush=True)
+    print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+    print(f"Input: {'File Upload' if st.session_state.uploaded_file else 'URL'}", flush=True)
+    print(f"Rubric: {selected_rubric_name}", flush=True)
+    print(f"Provider: {provider}", flush=True)
+    print("="*70 + "\n", flush=True)
     
     # Warn user about UI unresponsiveness
     warning_placeholder = st.empty()
@@ -431,6 +458,9 @@ if st.session_state.start_analysis:
         # Store results in session state for persistence across reruns
         st.session_state.analysis_results = res
         
+        # Clear any previous errors on successful completion
+        st.session_state.last_error = None
+        
         # Reset analyzing state after successful completion
         st.session_state.analyzing = False
         
@@ -447,8 +477,10 @@ if st.session_state.start_analysis:
         
     except FileNotFoundError as e:
         st.session_state.analyzing = False
-        st.rerun()
         warning_placeholder.empty()
+        error_msg = f"File not found: {e}\n\nTraceback:\n{traceback.format_exc()}"
+        st.session_state.last_error = error_msg
+        print(f"\n❌ ERROR: {error_msg}", flush=True)  # Log to console
         if 'ffmpeg' in str(e).lower():
             st.error("❌ ffmpeg not found")
             st.write("ffmpeg is required for video/audio processing.")
@@ -456,12 +488,18 @@ if st.session_state.start_analysis:
             st.code("brew install ffmpeg", language="bash")
         else:
             st.error(f"File not found: {e}")
+        st.rerun()
     except Exception as e:
         st.session_state.analyzing = False
-        st.rerun()
         warning_placeholder.empty()
+        error_msg = f"Error processing video: {e}\n\nTraceback:\n{traceback.format_exc()}"
+        st.session_state.last_error = error_msg
+        print(f"\n❌ ERROR: {error_msg}", flush=True)  # Log to console
         st.error(f"Error processing video: {e}")
         st.write("Run `run.sh check` to verify all dependencies are installed.")
+        with st.expander("🔍 View detailed error traceback"):
+            st.code(traceback.format_exc())
+        st.rerun()
     finally:
         # Clean up temp file
         if tmp:

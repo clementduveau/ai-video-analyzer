@@ -24,6 +24,6 @@ services:
       - STREAMLIT_SERVER_RUN_ON_SAVE=false
       - TORCH_VARIANT=${TORCH_VARIANT:-cpu}
     restart: on-failure
-    # macOS-specific settings
+    # Temp directory for video processing (increased from 100m to 2GB for long session and bigger files than 100m)
     tmpfs:
-      - /tmp:noexec,size=100m
+      - /tmp:size=2G
