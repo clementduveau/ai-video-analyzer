@@ -1,5 +1,5 @@
 # Demo Video Analyzer
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![CI](https://github.com/dsmilne3/ai-video-analyzer/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dsmilne3/ai-video-analyzer/actions/workflows/ci.yml)
 
 Automatically evaluate demo videos using AI. For initial transcription and translation tasks, the project uses a **local-first pipeline** for cost control, with optional cloud API escalation for using different models. The user's choice of LLM provider (OpenAI or Anthropic) is then used to evaluate the video content against a selected rubric and provide quantitative feedback to the submitter.
 
