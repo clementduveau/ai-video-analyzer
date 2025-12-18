@@ -25,7 +25,7 @@ htmlcov/
 *.swp
 *.swo
 *~
-.github/
+
 
 # Streamlit
 .streamlit/
