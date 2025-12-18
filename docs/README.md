@@ -44,5 +44,5 @@ This folder contains detailed documentation for the Demo Video Analyzer project.
 ## Quick Links
 
 - [Main README](../README.md)
-- [Quick Start Guide](QUICKSTART.md)
+ - [Quick Start Guide](../QUICKSTART.md)
 - [Rubric Guide](rubric/RUBRIC.md)

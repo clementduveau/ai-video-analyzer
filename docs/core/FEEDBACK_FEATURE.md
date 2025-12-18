@@ -248,4 +248,4 @@ Potential improvements to consider:
 - [README.md](README.md) - Main project documentation
 - [FEEDBACK_EXAMPLE.md](FEEDBACK_EXAMPLE.md) - Sample feedback outputs
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - Overall architecture
-- [QUICKSTART.md](QUICKSTART.md) - Getting started guide
+ - [QUICKSTART.md](../QUICKSTART.md) - Getting started guide
