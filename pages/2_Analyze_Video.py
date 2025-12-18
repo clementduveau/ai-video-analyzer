@@ -12,6 +12,12 @@ import json
 from pathlib import Path
 from datetime import datetime
 
+st.set_page_config(
+    page_title="Analyze Video - AI Video Analyzer",
+    page_icon="🎬",
+    layout="wide"
+)
+
 # Check for dependencies
 try:
     from src.video_evaluator import VideoEvaluator, AIProvider, list_available_rubrics, save_results
@@ -303,17 +309,32 @@ if 'start_analysis' not in st.session_state:
 can_analyze = (uploaded is not None or (video_url and video_url.strip() and url_is_valid)) and first_name.strip() and last_name.strip() and partner_name.strip()
 
 # Processing options
-st.caption("⚙️ Processing Options")
+st.subheader("⚙️ Processing Options")
+
+# Determine API key validity for providers
+openai_valid = bool(openai_key and openai_key.startswith('sk-') and not openai_key.endswith('your-openai-key-here'))
+anthropic_valid = bool(anthropic_key and anthropic_key.startswith('sk-ant-') and not anthropic_key.endswith('your-anthropic-key-here'))
+
+# Gate OpenAI API option on valid OpenAI key (only OpenAI has Whisper API)
+openai_api_enabled = openai_valid
+
+# Build transcription method options: show OpenAI Whisper API only when OpenAI key is valid
+method_options = ["Local Whisper model"] + (["OpenAI Whisper API"] if openai_api_enabled else [])
+
+# Show header
+st.text("Transcription Method")
+
+# Inform user how to enable OpenAI API when key isn't loaded (before the radio)
+if not openai_api_enabled:
+    st.caption("Load a valid OpenAI API key to enable remote transcription.")
+
 transcription_method = st.radio(
     "Transcription Method",
-    options=["Local (Whisper)", "OpenAI API (Faster)"],
-    help="Choose 'Local' for free (CPU/GPU) or 'OpenAI API' for faster processing (costs money)",
-    horizontal=True
+    options=method_options,
+    help="Use Local Whisper model for machines w/ GPUs - slow for CPU only; OpenAI Whisper API for CPU only machines - incurs cost",
+    horizontal=True,
+    label_visibility="collapsed"
 )
-
-# Warn if OpenAI API transcription is selected but no API key is available
-if "OpenAI API" in transcription_method and not (openai_key and openai_key.startswith('sk-') and not openai_key.endswith('your-openai-key-here')):
-    st.warning("⚠️ OpenAI API transcription selected but no valid OpenAI API key found. Will fall back to local transcription.")
 
 translate = st.checkbox('Translate to English', value=True, help='Automatically translate non-English audio to English using Whisper')
 vision = st.checkbox('Enable visual alignment checks')
@@ -345,8 +366,8 @@ if st.session_state.start_analysis:
         prov = AIProvider.OPENAI if provider == 'openai' else AIProvider.ANTHROPIC
         rubric_filename = rubric_options[selected_rubric_name]
         
-        # Map friendly name to internal value
-        method_internal = "openai" if "OpenAI API" in transcription_method else "local"
+        # Map friendly name to internal value - "OpenAI Whisper API" uses openai for transcription, "Local Whisper model" uses local
+        method_internal = "openai" if transcription_method == "OpenAI Whisper API" else "local"
         
         # Progress callback that prints to terminal (stdout)
         def progress_callback(message: str):
@@ -389,7 +410,7 @@ if st.session_state.start_analysis:
             progress_callback=ui_progress_callback,
             translate_to_english=translate,
             transcription_method=method_internal,
-            openai_api_key=openai_key  # Always pass OpenAI key for transcription option
+            openai_api_key=openai_key  # Always pass OpenAI key for Whisper API
         )
         
         with status_placeholder.container():
@@ -663,22 +684,30 @@ if st.session_state.analysis_results is not None:
                 if category_confidences:
                     avg_confidence = sum(category_confidences) / len(category_confidences)
                 
-                # Determine confidence display
+                # Determine confidence text label (High/Medium/Low)
                 if avg_confidence is not None:
                     if avg_confidence >= 8:
-                        confidence_display = f"🟢 {avg_confidence:.1f}/10"
+                        confidence_display = f"High ({avg_confidence:.1f}/10)"
                     elif avg_confidence >= 6:
-                        confidence_display = f"🟡 {avg_confidence:.1f}/10"
+                        confidence_display = f"Medium ({avg_confidence:.1f}/10)"
                     else:
-                        confidence_display = f"🔴 {avg_confidence:.1f}/10"
+                        confidence_display = f"Low ({avg_confidence:.1f}/10)"
                 else:
                     confidence_display = "N/A"
+                
+                # Determine score stoplight based on percentage
+                if percentage >= 80:
+                    score_icon = "🟢"
+                elif percentage >= 60:
+                    score_icon = "🟡"
+                else:
+                    score_icon = "🔴"
                 
                 col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                 with col1:
                     st.markdown(f"**{cat_name}**")
                 with col2:
-                    st.markdown(f"**{points}/{max_points}** ({percentage:.1f}%)")
+                    st.markdown(f"{score_icon} **{points}/{max_points}** ({percentage:.1f}%)")
                 with col3:
                     st.markdown(f"**{weight:.1f}**")
                 with col4:

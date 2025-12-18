@@ -517,7 +517,7 @@ class VideoEvaluator:
         self.translate_to_english = translate_to_english
         self.progress_callback = progress_callback
         self.transcription_method = transcription_method
-        # Separate OpenAI API key for transcription (may differ from provider's api_key)
+        # Separate OpenAI API key for Whisper transcription (always uses OpenAI's API)
         self.openai_api_key = openai_api_key if openai_api_key else (api_key if provider == AIProvider.OPENAI else None)
 
         # Create temporary directory for processing
@@ -779,12 +779,21 @@ class VideoEvaluator:
         try:
             if self.verbose:
                 print(f"DEBUG: transcription_method={self.transcription_method}, openai_api_key={'set' if self.openai_api_key else 'NOT SET'}")
-            if self.transcription_method == "openai" and self.openai_api_key:
+            
+            # Check if remote transcription is requested (openai or anthropic)
+            if self.transcription_method in ["openai", "anthropic"] and self.transcription_method != "local":
                 if self.verbose:
-                    print(f"Using OpenAI API for transcription (Task: {'translate' if self.translate_to_english else 'transcribe'})")
+                    print(f"Using remote API for transcription (Task: {'translate' if self.translate_to_english else 'transcribe'})")
                 
-                # Import OpenAI client directly (may not be self.llm if provider is Anthropic)
+                # Import OpenAI client - remote transcription uses OpenAI's Whisper API
                 import openai
+                
+                if not self.openai_api_key:
+                    if self.verbose:
+                        print(f"Remote API transcription requested but no OpenAI API key available. Falling back to local Whisper.")
+                    # Fall through to local transcription
+                    raise ValueError("No OpenAI API key available for remote transcription")
+                
                 client = openai.OpenAI(api_key=self.openai_api_key)
                 
                 with open(audio_path, "rb") as audio_file:
@@ -821,10 +830,7 @@ class VideoEvaluator:
             else:
                 # Use local whisper model
                 if self.verbose:
-                    if self.transcription_method == "openai" and not self.openai_api_key:
-                        print("OpenAI API transcription requested but no API key available. Falling back to local Whisper.")
-                    else:
-                        print("Using local Whisper for transcription")
+                    print("Using local Whisper for transcription")
                 if self.translate_to_english:
                     # First, detect language without translation
                     temp_res = _transcribe_with_fallback(audio_path)
@@ -2547,8 +2553,13 @@ Return strictly parseable JSON with this exact structure:
                     raise ValueError(f'Unsupported file extension: {ext}')
 
             # Transcribe with timestamps
-            device_display = self._get_device_display()
-            self._report_progress(f"🎤 Transcribing audio with Whisper ({self.transcription_method}) {self.whisper_model_name} model on {device_display}...")
+            if self.transcription_method in ["openai", "anthropic"]:
+                # Remote transcription via OpenAI API
+                self._report_progress(f"🎤 Transcribing audio with OpenAI Whisper API...")
+            else:
+                # Local transcription
+                device_display = self._get_device_display()
+                self._report_progress(f"🎤 Transcribing audio with Whisper {self.whisper_model_name} model on {device_display}...")
             transcription = self.transcribe_with_timestamps(audio_path)
 
             # Pick highlights
