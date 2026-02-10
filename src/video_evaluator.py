@@ -506,6 +506,70 @@ class VideoEvaluator:
                 print(f"Warning: Selective MPS placement failed ({e}), using CPU")
             return model
 
+    def _load_local_whisper_model(self, whisper_module):
+        """Load local Whisper model for transcription. Can be called lazily if needed as fallback."""
+        if self.whisper_model is not None and self.whisper_model_name not in (None, "remote", "mock"):
+            return  # Already loaded
+        
+        if not whisper_module:
+            if self.verbose:
+                print("Warning: whisper module not available, cannot load local model")
+            return
+            
+        try:
+            # Use medium model for all tasks - best balance of accuracy and speed for multilingual content
+            model_name = "medium"
+            try:
+                self.whisper_model = whisper_module.load_model(model_name, device="cpu")
+                import torch
+                if torch.backends.mps.is_available():
+                    try:
+                        test_tensor = torch.randn(1, 10, device='mps')
+                        test_result = torch.softmax(test_tensor, dim=-1)
+                        if not torch.isnan(test_result).any():
+                            self.whisper_model = self._move_model_to_mps_selective(self.whisper_model)
+                            self.device = "mps"
+                            if self.verbose:
+                                print(f"✓ Whisper {model_name} model loaded on MPS (Apple Silicon GPU)")
+                        else:
+                            if self.verbose:
+                                print("Warning: MPS test failed, keeping model on CPU")
+                    except Exception as mps_test_error:
+                        if self.verbose:
+                            print(f"Warning: MPS test failed ({mps_test_error}), keeping model on CPU")
+                else:
+                    self.device = "cpu"
+                    if self.verbose:
+                        print(f"✓ Whisper {model_name} model loaded on CPU")
+                self.whisper_model_name = model_name
+                
+            except Exception as e:
+                if self.verbose:
+                    print(f"Warning: Failed to load {model_name} model ({e}), trying base model")
+                
+                try:
+                    self.whisper_model = whisper_module.load_model("base", device="cpu")
+                    self.whisper_model_name = "base"
+                    self.device = "cpu"
+                    if self.verbose:
+                        print("✓ Whisper base model loaded on CPU")
+                except Exception as base_error:
+                    if self.verbose:
+                        print(f"Warning: Failed to load base model ({base_error}), trying turbo model")
+                    
+                    try:
+                        self.whisper_model = whisper_module.load_model("turbo", device="cpu")
+                        self.whisper_model_name = "turbo"
+                        self.device = "cpu"
+                        if self.verbose:
+                            print("✓ Whisper turbo model loaded on CPU")
+                    except Exception as turbo_error:
+                        if self.verbose:
+                            print(f"Error: All Whisper models failed to load. Last error: {turbo_error}")
+                        self.whisper_model = None
+        finally:
+            pass
+
     def __init__(self, rubric_path: str, api_key: Optional[str] = None, provider: AIProvider = AIProvider.OPENAI, verbose: bool = False, enable_vision: bool = False, translate_to_english: bool = False, progress_callback: Optional[Callable[[str], None]] = None, transcription_method: str = "local", openai_api_key: Optional[str] = None):
         # Load rubric using the load_rubric function which handles path construction
         self.rubric = load_rubric(rubric_path)
@@ -548,85 +612,34 @@ class VideoEvaluator:
             cv2 = None
 
         # Load whisper model - medium for optimal multilingual transcription and translation
+        # Only load local Whisper model if transcription_method is "local" (skip for "openai" to save time/memory)
         self.whisper_model = None  # Initialize to None
         self.whisper_model_name = None
         self.device = "cpu"  # Default device
-        if whisper:
-            try:
-                # Use medium model for all tasks - it provides the best balance of accuracy and speed for multilingual content
-                # Medium model significantly outperforms base for non-English languages while remaining reasonably fast
-                model_name = "medium"  # Use medium model for optimal multilingual performance
-                # Try MPS (Apple Silicon GPU) first, but load on CPU first to avoid sparse tensor issues
-                try:
-                    self.whisper_model = whisper.load_model(model_name, device="cpu")
-                    # Test MPS stability before using it
-                    import torch
-                    if torch.backends.mps.is_available():
-                        try:
-                            # Quick stability test: create and use a small tensor
-                            test_tensor = torch.randn(1, 10, device='mps')
-                            test_result = torch.softmax(test_tensor, dim=-1)
-                            if not torch.isnan(test_result).any():
-                                # MPS seems stable, try selective placement
-                                self.whisper_model = self._move_model_to_mps_selective(self.whisper_model)
-                                self.device = "mps"
-                                if self.verbose:
-                                    print(f"✓ Whisper {model_name} model loaded on MPS (Apple Silicon GPU)")
-                            else:
-                                if self.verbose:
-                                    print("Warning: MPS test failed, keeping model on CPU")
-                        except Exception as mps_test_error:
-                            if self.verbose:
-                                print(f"Warning: MPS test failed ({mps_test_error}), keeping model on CPU")
-                    else:
-                        self.device = "cpu"
-                        if self.verbose:
-                            print(f"✓ Whisper {model_name} model loaded on CPU")
-                    self.whisper_model_name = model_name
-                    
-                except Exception as e:
-                    if self.verbose:
-                        print(f"Warning: Failed to load {model_name} model ({e}), trying base model")
-                    
-                    # Fallback - try base if medium fails (better than turbo for translation)
-                    try:
-                        self.whisper_model = whisper.load_model("base", device="cpu")
-                        self.whisper_model_name = "base"
-                        self.device = "cpu"
-                        if self.verbose:
-                            print("✓ Whisper base model loaded on CPU")
-                    except Exception as base_error:
-                        if self.verbose:
-                            print(f"Warning: Failed to load base model ({base_error}), trying turbo model")
-                        
-                        # Last resort - try turbo (English-only optimized, may not translate well)
-                        try:
-                            self.whisper_model = whisper.load_model("turbo", device="cpu")
-                            self.whisper_model_name = "turbo"
-                            self.device = "cpu"
-                            if self.verbose:
-                                print("✓ Whisper turbo model loaded on CPU")
-                        except Exception as turbo_error:
-                            if self.verbose:
-                                print(f"Error: All Whisper models failed to load. Last error: {turbo_error}")
-                            self.whisper_model = None
-
-            finally:
-                pass
+        self._whisper_module = whisper  # Store reference for lazy loading if needed
+        
+        if self.transcription_method == "local":
+            self._load_local_whisper_model(whisper)
+        else:
+            if self.verbose:
+                print(f"Skipping local Whisper model loading (transcription_method={self.transcription_method})")
+            self.whisper_model_name = "remote"
+            self.device = "remote"
 
         if whisperx:
             try:
                 self.aligner = whisperx.load_align_model(language_code="en", device="mps")
             except Exception:
                 # Fallback to CPU if MPS not available
-                self.aligner = whisperx.load_align_model(language_code="en", device="cpu")
-            except Exception:
-                self.aligner = None
+                try:
+                    self.aligner = whisperx.load_align_model(language_code="en", device="cpu")
+                except Exception:
+                    self.aligner = None
         else:
             self.aligner = None
 
-        # Fallback minimal transcriber when whisper isn't installed (for tests)
-        if not self.whisper_model:
+        # Fallback minimal transcriber when whisper isn't installed and local is needed (for tests)
+        if self.transcription_method == "local" and not self.whisper_model:
             class _FallbackTranscriber:
                 def transcribe(self, audio_path, **kwargs):
                     # very small mock transcription
@@ -640,14 +653,22 @@ class VideoEvaluator:
             try:
                 import openai
                 self.llm = openai
+                if self.verbose:
+                    print(f"✓ AI Provider: OpenAI (module loaded successfully)")
             except Exception:
                 self.llm = None
+                if self.verbose:
+                    print(f"⚠ AI Provider: OpenAI selected but module failed to load")
         else:
             try:
                 import anthropic
                 self.llm = anthropic
+                if self.verbose:
+                    print(f"✓ AI Provider: Anthropic (module loaded successfully)")
             except Exception:
                 self.llm = None
+                if self.verbose:
+                    print(f"⚠ AI Provider: Anthropic selected but module failed to load")
 
     def __del__(self):
         """Cleanup temporary directory when object is destroyed."""
@@ -670,8 +691,77 @@ class VideoEvaluator:
             return "Apple Silicon GPU (MPS)"
         elif self.device == "cpu":
             return "CPU"
+        elif self.device == "remote":
+            return "OpenAI API"
         else:
             return self.device.upper()
+
+    def _anthropic_json_call(self, prompt: str, max_tokens: int = 800, temperature: float = 0, model: str = 'claude-sonnet-4-5') -> Optional[Dict[str, Any]]:
+        """Make an Anthropic API call that returns parsed JSON.
+        
+        Uses system message and assistant prefill to ensure reliable JSON output.
+        Falls back to extracting JSON from freeform text if needed.
+        
+        Args:
+            prompt: The user prompt
+            max_tokens: Maximum tokens in response
+            temperature: Temperature for generation
+            model: Anthropic model to use
+            
+        Returns:
+            Parsed JSON dict, or None if call fails
+        """
+        if not self.llm or self.provider != AIProvider.ANTHROPIC:
+            return None
+        
+        with self.llm.Anthropic(api_key=self.api_key) as client:
+            resp = client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system="You are an expert evaluator. Always respond with valid JSON only, no markdown formatting, no code blocks, no extra text.",
+                messages=[
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": "{"}
+                ]
+            )
+            # The assistant prefill means the response starts after the "{" we provided
+            raw_text = resp.content[0].text if hasattr(resp, 'content') and resp.content else ""
+            
+            # Check if response has markdown code fences (this shouldn't happen but API sometimes ignores instructions)
+            raw_text_stripped = raw_text.strip()
+            if raw_text_stripped.startswith('```json'):
+                # Response ignored prefill and returned markdown - extract content
+                raw_text_stripped = raw_text_stripped[7:]  # Remove ```json
+                if raw_text_stripped.endswith('```'):
+                    raw_text_stripped = raw_text_stripped[:-3]
+                json_text = raw_text_stripped.strip()
+            elif raw_text_stripped.startswith('```'):
+                # Generic code fence
+                raw_text_stripped = raw_text_stripped[3:]
+                if raw_text_stripped.endswith('```'):
+                    raw_text_stripped = raw_text_stripped[:-3]
+                json_text = raw_text_stripped.strip()
+            else:
+                # Normal case: prepend the opening brace from prefill
+                json_text = "{" + raw_text
+            
+            # Try direct parse first
+            try:
+                return json.loads(json_text)
+            except json.JSONDecodeError:
+                pass
+            
+            # Fallback: try to extract JSON object from the text
+            import re
+            match = re.search(r'\{[\s\S]*\}', json_text)
+            if match:
+                try:
+                    return json.loads(match.group())
+                except json.JSONDecodeError:
+                    pass
+            
+            return None
 
     def _report_progress(self, message: str):
         """Report progress message via callback or print if verbose."""
@@ -721,6 +811,256 @@ class VideoEvaluator:
         ]
         subprocess.run(cmd, capture_output=True, check=True)
         return out_audio
+
+    def _ensure_local_whisper_loaded(self):
+        """Lazily load local Whisper model if not already loaded (e.g., for fallback from OpenAI API)."""
+        if self.whisper_model is not None and self.whisper_model_name not in (None, "remote", "mock"):
+            return  # Already loaded
+        if self.verbose:
+            print("Loading local Whisper model for fallback...")
+        self._report_progress("⏳ Loading local Whisper model (fallback)...")
+        self._load_local_whisper_model(self._whisper_module)
+        if not self.whisper_model or self.whisper_model_name in (None, "remote"):
+            # Set up fallback transcriber
+            class _FallbackTranscriber:
+                def transcribe(self, audio_path, **kwargs):
+                    return {"text": "(mock) transcribed text from audio", "language": "en", "segments": []}
+            self.whisper_model = _FallbackTranscriber()
+            self.whisper_model_name = "mock"
+            self.device = "mock"
+
+    OPENAI_MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB OpenAI Whisper API limit
+
+    def _split_audio_for_openai(self, audio_path: str) -> list:
+        """Split an audio file into chunks under 25MB for OpenAI API.
+        
+        Uses ffmpeg to split the audio into segments based on duration.
+        Returns a list of chunk file paths.
+        """
+        file_size = os.path.getsize(audio_path)
+        if file_size <= self.OPENAI_MAX_FILE_SIZE:
+            return [audio_path]
+        
+        if self.verbose:
+            print(f"Audio file is {file_size / (1024*1024):.1f}MB, splitting into chunks for OpenAI API (limit: 25MB)...")
+        self._report_progress(f"✂️ Splitting audio into chunks for OpenAI API ({file_size / (1024*1024):.1f}MB > 25MB limit)...")
+        
+        # Calculate number of chunks needed (with some margin)
+        num_chunks = (file_size // (self.OPENAI_MAX_FILE_SIZE - 1024 * 1024)) + 1  # Leave 1MB margin
+        
+        # Get audio duration using ffprobe
+        ffmpeg_cmd = getattr(self, 'ffmpeg_path', 'ffmpeg')
+        ffprobe_cmd = ffmpeg_cmd.replace('ffmpeg', 'ffprobe') if 'ffmpeg' in ffmpeg_cmd else 'ffprobe'
+        
+        try:
+            duration_result = subprocess.run(
+                [ffprobe_cmd, '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', audio_path],
+                capture_output=True, text=True, check=True
+            )
+            total_duration = float(duration_result.stdout.strip())
+        except Exception as e:
+            if self.verbose:
+                print(f"Warning: Could not determine audio duration ({e}), estimating from file size")
+            # Rough estimate: ~16KB/s for 16kHz 16-bit mono WAV
+            total_duration = file_size / 32000
+        
+        chunk_duration = total_duration / num_chunks
+        chunks = []
+        
+        for i in range(int(num_chunks)):
+            start_time = i * chunk_duration
+            chunk_path = os.path.join(self.temp_dir, f"chunk_{i}.mp3")
+            
+            # Use ffmpeg to extract chunk and compress to mp3 (much smaller than WAV)
+            cmd = [
+                ffmpeg_cmd, '-i', audio_path, '-ss', str(start_time), '-t', str(chunk_duration),
+                '-acodec', 'libmp3lame', '-ab', '128k', '-ar', '16000', '-ac', '1', '-y', chunk_path
+            ]
+            try:
+                subprocess.run(cmd, capture_output=True, check=True)
+                if os.path.exists(chunk_path) and os.path.getsize(chunk_path) > 0:
+                    chunks.append(chunk_path)
+                    if self.verbose:
+                        chunk_size = os.path.getsize(chunk_path) / (1024 * 1024)
+                        print(f"  Chunk {i+1}/{int(num_chunks)}: {chunk_size:.1f}MB (start: {start_time:.1f}s)")
+            except Exception as e:
+                if self.verbose:
+                    print(f"Warning: Failed to create chunk {i}: {e}")
+        
+        if not chunks:
+            raise RuntimeError("Failed to split audio file into chunks")
+        
+        return chunks
+
+    def _transcribe_with_openai_api(self, audio_path: str) -> dict:
+        """Transcribe audio using OpenAI Whisper API, with chunking for large files and fallback to local."""
+        if self.verbose:
+            print(f"Using OpenAI API for transcription (Task: {'translate' if self.translate_to_english else 'transcribe'})")
+        
+        import openai
+        client = openai.OpenAI(api_key=self.openai_api_key)
+        
+        file_size = os.path.getsize(audio_path)
+        
+        # Check if file needs chunking
+        if file_size > self.OPENAI_MAX_FILE_SIZE:
+            if self.verbose:
+                print(f"File size ({file_size / (1024*1024):.1f}MB) exceeds OpenAI API limit (25MB)")
+            
+            # Try to compress to mp3 first (WAV files are very large, mp3 is much smaller)
+            compressed_path = os.path.join(self.temp_dir, "compressed_audio.mp3")
+            ffmpeg_cmd = getattr(self, 'ffmpeg_path', 'ffmpeg')
+            try:
+                cmd = [
+                    ffmpeg_cmd, '-i', audio_path, '-acodec', 'libmp3lame', '-ab', '128k',
+                    '-ar', '16000', '-ac', '1', '-y', compressed_path
+                ]
+                subprocess.run(cmd, capture_output=True, check=True)
+                compressed_size = os.path.getsize(compressed_path)
+                if self.verbose:
+                    print(f"Compressed audio: {file_size / (1024*1024):.1f}MB -> {compressed_size / (1024*1024):.1f}MB")
+                
+                if compressed_size <= self.OPENAI_MAX_FILE_SIZE:
+                    # Compressed file fits within limits, use it directly
+                    audio_path = compressed_path
+                    file_size = compressed_size
+                else:
+                    # Still too large, need to chunk
+                    chunks = self._split_audio_for_openai(compressed_path)
+                    return self._transcribe_chunks_with_openai(client, chunks)
+            except Exception as e:
+                if self.verbose:
+                    print(f"Compression failed ({e}), trying chunking on original file")
+                chunks = self._split_audio_for_openai(audio_path)
+                return self._transcribe_chunks_with_openai(client, chunks)
+        
+        # Single file transcription
+        try:
+            return self._openai_api_transcribe_single(client, audio_path)
+        except Exception as e:
+            error_str = str(e)
+            if '413' in error_str or 'Maximum content size' in error_str:
+                if self.verbose:
+                    print(f"OpenAI API rejected file (too large). Falling back to local Whisper...")
+                self._report_progress("⚠️ File too large for OpenAI API, falling back to local Whisper...")
+                self._ensure_local_whisper_loaded()
+                return self._transcribe_with_local_whisper_direct(audio_path)
+            raise
+
+    def _openai_api_transcribe_single(self, client, audio_path: str) -> dict:
+        """Transcribe a single audio file with OpenAI API."""
+        with open(audio_path, "rb") as audio_file:
+            if self.translate_to_english:
+                transcript = client.audio.translations.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="verbose_json"
+                )
+            else:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="verbose_json"
+                )
+        
+        return {
+            'text': transcript.text,
+            'language': getattr(transcript, 'language', 'en'),
+            'segments': [
+                {
+                    'start': seg.start,
+                    'end': seg.end,
+                    'text': seg.text,
+                    'avg_logprob': seg.avg_logprob,
+                    'compression_ratio': seg.compression_ratio,
+                    'no_speech_prob': seg.no_speech_prob
+                } for seg in transcript.segments
+            ]
+        }
+
+    def _transcribe_chunks_with_openai(self, client, chunks: list) -> dict:
+        """Transcribe multiple audio chunks with OpenAI API and merge results."""
+        all_text = []
+        all_segments = []
+        detected_language = 'en'
+        time_offset = 0.0
+        
+        for i, chunk_path in enumerate(chunks):
+            if self.verbose:
+                print(f"  Transcribing chunk {i+1}/{len(chunks)}...")
+            self._report_progress(f"🎤 Transcribing chunk {i+1}/{len(chunks)} with OpenAI API...")
+            
+            try:
+                chunk_result = self._openai_api_transcribe_single(client, chunk_path)
+            except Exception as e:
+                if self.verbose:
+                    print(f"  Warning: Chunk {i+1} failed ({e}), skipping")
+                continue
+            
+            all_text.append(chunk_result['text'])
+            if i == 0:
+                detected_language = chunk_result.get('language', 'en')
+            
+            # Adjust segment timestamps with offset
+            for seg in chunk_result.get('segments', []):
+                seg['start'] += time_offset
+                seg['end'] += time_offset
+                all_segments.append(seg)
+            
+            # Get the duration of this chunk for the next offset
+            if chunk_result.get('segments'):
+                last_seg = chunk_result['segments'][-1]
+                time_offset = last_seg['end']
+        
+        return {
+            'text': ' '.join(all_text),
+            'language': detected_language,
+            'segments': all_segments
+        }
+
+    def _transcribe_with_local_whisper(self, audio_path: str, _transcribe_with_fallback) -> dict:
+        """Transcribe using local Whisper model."""
+        if self.verbose:
+            print("Using local Whisper for transcription")
+        if self.translate_to_english:
+            # First, detect language without translation
+            temp_res = _transcribe_with_fallback(audio_path)
+            detected_language = temp_res.get('language', 'unknown')
+            
+            # If not English, translate
+            if detected_language and detected_language.lower() != 'en':
+                return _transcribe_with_fallback(audio_path, task='translate')
+            else:
+                return temp_res  # Already in English
+        else:
+            return _transcribe_with_fallback(audio_path)
+
+    def _transcribe_with_local_whisper_direct(self, audio_path: str) -> dict:
+        """Transcribe using local Whisper model directly (without the closure-based fallback)."""
+        if self.verbose:
+            print("Using local Whisper for transcription (direct)")
+        
+        def _fallback(audio_path, task=None):
+            try:
+                if task == 'translate':
+                    return self.whisper_model.transcribe(audio_path, task='translate')
+                else:
+                    return self.whisper_model.transcribe(audio_path)
+            except Exception as e:
+                error_msg = str(e)
+                if 'nan' in error_msg.lower() and 'logits' in error_msg.lower():
+                    if self.verbose:
+                        print(f"Warning: MPS inference produced NaN values. Retrying on CPU...")
+                    import torch
+                    if hasattr(self.whisper_model, 'device') and self.whisper_model.device.type == 'mps':
+                        self.whisper_model = self.whisper_model.to('cpu')
+                    if task == 'translate':
+                        return self.whisper_model.transcribe(audio_path, task='translate')
+                    else:
+                        return self.whisper_model.transcribe(audio_path)
+                raise
+        
+        return self._transcribe_with_local_whisper(audio_path, _fallback)
 
     def transcribe_with_timestamps(self, audio_path: str) -> Dict[str, Any]:
         """Return transcript, segments with start/end and (if available) token confidences.
@@ -780,63 +1120,15 @@ class VideoEvaluator:
             if self.verbose:
                 print(f"DEBUG: transcription_method={self.transcription_method}, openai_api_key={'set' if self.openai_api_key else 'NOT SET'}")
             if self.transcription_method == "openai" and self.openai_api_key:
-                if self.verbose:
-                    print(f"Using OpenAI API for transcription (Task: {'translate' if self.translate_to_english else 'transcribe'})")
-                
-                # Import OpenAI client directly (may not be self.llm if provider is Anthropic)
-                import openai
-                client = openai.OpenAI(api_key=self.openai_api_key)
-                
-                with open(audio_path, "rb") as audio_file:
-                    if self.translate_to_english:
-                        transcript = client.audio.translations.create(
-                            model="whisper-1", 
-                            file=audio_file,
-                            response_format="verbose_json"
-                        )
-                    else:
-                        transcript = client.audio.transcriptions.create(
-                            model="whisper-1", 
-                            file=audio_file,
-                            response_format="verbose_json"
-                        )
-                
-                # Convert OpenAI verbose_json response (object) to dict structure compatible with local whisper
-                # The response object attributes match the keys we need (text, language, segments)
-                res = {
-                    'text': transcript.text,
-                    'language': getattr(transcript, 'language', 'en'),
-                    'segments': [
-                        {
-                            'start': seg.start,
-                            'end': seg.end,
-                            'text': seg.text,
-                            'avg_logprob': seg.avg_logprob,
-                            'compression_ratio': seg.compression_ratio,
-                            'no_speech_prob': seg.no_speech_prob
-                        } for seg in transcript.segments
-                    ]
-                }
-                
+                res = self._transcribe_with_openai_api(audio_path)
+            elif self.transcription_method == "local":
+                res = self._transcribe_with_local_whisper(audio_path, _transcribe_with_fallback)
             else:
-                # Use local whisper model
+                # transcription_method is "openai" but no API key — fall back to local
                 if self.verbose:
-                    if self.transcription_method == "openai" and not self.openai_api_key:
-                        print("OpenAI API transcription requested but no API key available. Falling back to local Whisper.")
-                    else:
-                        print("Using local Whisper for transcription")
-                if self.translate_to_english:
-                    # First, detect language without translation
-                    temp_res = _transcribe_with_fallback(audio_path)
-                    detected_language = temp_res.get('language', 'unknown')
-                    
-                    # If not English, translate
-                    if detected_language and detected_language.lower() != 'en':
-                        res = _transcribe_with_fallback(audio_path, task='translate')
-                    else:
-                        res = temp_res  # Already in English
-                else:
-                    res = _transcribe_with_fallback(audio_path)
+                    print("OpenAI API transcription requested but no API key available. Falling back to local Whisper.")
+                self._ensure_local_whisper_loaded()
+                res = self._transcribe_with_local_whisper(audio_path, _transcribe_with_fallback)
         except Exception as e:
             if self.verbose:
                 print(f"Error during transcription: {e}")
@@ -998,7 +1290,7 @@ class VideoEvaluator:
             try:
                 with self.llm.Anthropic(api_key=self.api_key) as client:
                     resp = client.messages.create(
-                        model='claude-3-5-haiku-20241022',
+                        model='claude-sonnet-4-5',
                         max_tokens=200,
                         messages=[{"role": "user", "content": f"Summarize the following transcript in 3 sentences:\n\n{transcript}"}]
                     )
@@ -1061,7 +1353,7 @@ Transcript excerpt:\n{transcript[:1200]}\n
                 for img in frames[:5]:
                     message.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img}})
                 with self.llm.Anthropic(api_key=self.api_key) as client:
-                    resp = client.messages.create(model='claude-3', messages=[{"role": "user", "content": message}])
+                    resp = client.messages.create(model='claude-sonnet-4-5', max_tokens=300, messages=[{"role": "user", "content": message}])
                     return resp.content[0].text
         except Exception:
             # fallback to heuristic
@@ -1212,14 +1504,8 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                with self.llm.Anthropic(api_key=self.api_key) as client:
-                    resp = client.messages.create(
-                        model='claude-3-5-haiku-20241022',
-                        max_tokens=800,
-                        temperature=0,  # Deterministic output for consistent scoring
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    result = json.loads(resp.content[0].text)
+                result = self._anthropic_json_call(prompt, max_tokens=800, temperature=0)
+                if result:
                     if self.verbose:
                         print(f"✓ Anthropic evaluation successful")
                     return result
@@ -1331,15 +1617,10 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
                 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                with self.llm.Anthropic(api_key=self.api_key) as client:
-                    resp = client.messages.create(
-                        model='claude-3-5-haiku-20241022',
-                        max_tokens=1000,
-                        temperature=0,
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    result = json.loads(resp.content[0].text)
-                return result
+                result = self._anthropic_json_call(prompt, max_tokens=1000, temperature=0)
+                if result:
+                    return result
+                raise RuntimeError("Anthropic returned no parseable JSON")
             except Exception as e:
                 raise e
         
@@ -1518,14 +1799,8 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                with self.llm.Anthropic(api_key=self.api_key) as client:
-                    resp = client.messages.create(
-                        model='claude-3-5-haiku-20241022',
-                        max_tokens=1000,
-                        temperature=0,  # Deterministic output for consistent scoring
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    result = json.loads(resp.content[0].text)
+                result = self._anthropic_json_call(prompt, max_tokens=1000, temperature=0)
+                if result:
                     if self.verbose:
                         print(f"✓ Anthropic evaluation successful")
                     return result
@@ -1734,31 +2009,12 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
                 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                with self.llm.Anthropic(api_key=self.api_key) as client:
-                    resp = client.messages.create(
-                        model='claude-3-5-haiku-20241022',
-                        max_tokens=800,
-                        temperature=0,
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    if resp.content and len(resp.content) > 0 and hasattr(resp.content[0], 'text'):
-                        text = resp.content[0].text
-                        if text:
-                            try:
-                                result = json.loads(text)
-                                return result
-                            except json.JSONDecodeError as e:
-                                if self.verbose:
-                                    print(f"Warning: Failed to parse JSON response for category {category['label']}: {e}")
-                                    print(f"Raw response text: {text[:500]}...")
-                                raise e
-                        else:
-                            if self.verbose:
-                                print(f"Warning: Anthropic response text is empty for category {category['label']} in chunk {chunk_num}")
-                    else:
-                        if self.verbose:
-                            print(f"Warning: Anthropic response missing content or text for category {category['label']} in chunk {chunk_num}")
-                            print(f"Response content: {resp.content}")
+                result = self._anthropic_json_call(prompt, max_tokens=800, temperature=0)
+                if result:
+                    return result
+                else:
+                    if self.verbose:
+                        print(f"Warning: Anthropic returned no parseable JSON for category {category['label']} in chunk {chunk_num}")
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: Anthropic API call failed for category {category['label']} in chunk {chunk_num} ({e}). Using fallback.")
@@ -1858,14 +2114,8 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
                 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                with self.llm.Anthropic(api_key=self.api_key) as client:
-                    resp = client.messages.create(
-                        model='claude-3-5-haiku-20241022',
-                        max_tokens=1000,
-                        temperature=0,
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    result = json.loads(resp.content[0].text)
+                result = self._anthropic_json_call(prompt, max_tokens=1000, temperature=0)
+                if result:
                     return result
             except Exception as e:
                 if self.verbose:
@@ -2116,14 +2366,8 @@ Visual analysis (if any):\n{visual_analysis or 'None'}
                 
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                with self.llm.Anthropic(api_key=self.api_key) as client:
-                    resp = client.messages.create(
-                        model='claude-3-5-haiku-20241022',
-                        max_tokens=800,
-                        temperature=0,
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    result = json.loads(resp.content[0].text)
+                result = self._anthropic_json_call(prompt, max_tokens=800, temperature=0)
+                if result:
                     return result
             except Exception as e:
                 if self.verbose:
@@ -2321,20 +2565,10 @@ Return strictly parseable JSON with this exact structure:
         
         elif self.llm and self.provider == AIProvider.ANTHROPIC:
             try:
-                with self.llm.Anthropic(api_key=self.api_key) as client:
-                    resp = client.messages.create(
-                        model='claude-3-5-haiku-20241022',
-                        max_tokens=1000,
-                        temperature=0,  # Deterministic output for consistent feedback
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    # Handle Anthropic response format
-                    if hasattr(resp, 'content') and resp.content:
-                        content = resp.content[0]
-                        if hasattr(content, 'text'):
-                            feedback_data = json.loads(content.text)
-                            feedback_data['tone'] = tone
-                            return feedback_data
+                feedback_data = self._anthropic_json_call(prompt, max_tokens=1000, temperature=0)
+                if feedback_data:
+                    feedback_data['tone'] = tone
+                    return feedback_data
             except Exception as e:
                 if self.verbose:
                     print(f"Warning: Anthropic API call failed for feedback ({e}). Using fallback.")
@@ -2369,6 +2603,13 @@ Return strictly parseable JSON with this exact structure:
 
     def process(self, source: str, is_url: bool = False, enable_vision: Optional[bool] = None) -> Dict[str, Any]:
         enable_vision = self.enable_vision if enable_vision is None else enable_vision
+        
+        # Log provider info prominently
+        provider_name = "OpenAI" if self.provider == AIProvider.OPENAI else "Anthropic"
+        model_name = "gpt-4o-mini" if self.provider == AIProvider.OPENAI else "claude-sonnet-4-5"
+        llm_status = "loaded" if self.llm else "NOT loaded"
+        self._report_progress(f"🤖 AI Provider: {provider_name} ({model_name}) — LLM module {llm_status}")
+        
         audio_path = None
         video_for_frames = None
         downloaded_file = None
@@ -2421,7 +2662,10 @@ Return strictly parseable JSON with this exact structure:
 
             # Transcribe with timestamps
             device_display = self._get_device_display()
-            self._report_progress(f"🎤 Transcribing audio with Whisper ({self.transcription_method}) {self.whisper_model_name} model on {device_display}...")
+            if self.transcription_method == "openai":
+                self._report_progress(f"🎤 Transcribing audio with OpenAI Whisper API...")
+            else:
+                self._report_progress(f"🎤 Transcribing audio with local Whisper {self.whisper_model_name} model on {device_display}...")
             transcription = self.transcribe_with_timestamps(audio_path)
 
             # Pick highlights
@@ -2445,7 +2689,7 @@ Return strictly parseable JSON with this exact structure:
                 'device': self.device,
                 'rubric': self.rubric_name,
                 'llm_provider': self.provider.value if hasattr(self.provider, 'value') else str(self.provider),
-                'llm_model': 'gpt-4o-mini' if self.provider == AIProvider.OPENAI else 'claude-3-5-haiku-20241022',
+                'llm_model': 'gpt-4o-mini' if self.provider == AIProvider.OPENAI else 'claude-sonnet-4-5',
                 'evaluation': evaluation,
                 'feedback': feedback,
                 'transcript': transcription['text'],

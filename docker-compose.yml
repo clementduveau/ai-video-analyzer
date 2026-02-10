@@ -9,13 +9,13 @@ services:
       - "8501:8501"
     volumes:
       # Mount results directory for persistence
-      - ./results:/app/results
+      - ./results:/app/results:z
       # Mount rubrics directory to allow custom rubrics
-      - ./rubrics:/app/rubrics
+      - ./rubrics:/app/rubrics:z
       # Mount overrides directory for score override presets
-      - ./overrides:/app/overrides
+      - ./overrides:/app/overrides:z
       # Optional: Mount environment file for API keys
-      - ./.env:/app/.env:ro
+      - ./.env:/app/.env:z,ro
     environment:
       - PYTHONPATH=/app
       - STREAMLIT_SERVER_HEADLESS=true
@@ -24,6 +24,6 @@ services:
       - STREAMLIT_SERVER_RUN_ON_SAVE=false
       - TORCH_VARIANT=${TORCH_VARIANT:-cpu}
     restart: on-failure
-    # Temp directory for video processing (increased from 100m to 2GB for long session and bigger files than 100m)
+    userns_mode: keep-id # Podman specific
     tmpfs:
-      - /tmp:size=2G
+      - /tmp:size=2G # Temp directory for video processing

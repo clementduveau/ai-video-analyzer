@@ -5,7 +5,7 @@ yt-dlp
 ffmpeg-python
 openai
 anthropic
-opencv-python
+opencv-python-headless  # Headless variant - no GUI deps needed in Docker/server
 streamlit
 tqdm
 python-dotenv

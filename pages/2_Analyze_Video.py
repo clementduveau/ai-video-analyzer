@@ -157,7 +157,22 @@ with st.sidebar:
             st.success(f"✅ '{selected_rubric_name}' is now the default rubric!")
             st.rerun()
     
-    provider = st.selectbox('AI Provider', ['openai','anthropic'])
+    # Determine default provider from env var or fallback to 'openai'
+    default_provider = os.getenv('DEFAULT_PROVIDER', 'openai').lower()
+    if default_provider not in ('openai', 'anthropic'):
+        default_provider = 'openai'
+    
+    # Initialize session state for provider if not set
+    if 'ai_provider' not in st.session_state:
+        st.session_state.ai_provider = default_provider
+    
+    provider_options = ['openai', 'anthropic']
+    provider = st.selectbox(
+        'AI Provider',
+        provider_options,
+        index=provider_options.index(st.session_state.ai_provider),
+        key='ai_provider'
+    )
 
     # System Status (moved to bottom of sidebar)
     st.subheader("System Status")
@@ -321,11 +336,17 @@ can_analyze = (uploaded is not None or (video_url and video_url.strip() and url_
 
 # Processing options
 st.caption("⚙️ Processing Options")
+
+# Initialize transcription method in session state if not set
+if 'transcription_method' not in st.session_state:
+    st.session_state.transcription_method = "Local (Whisper)"
+
 transcription_method = st.radio(
     "Transcription Method",
     options=["Local (Whisper)", "OpenAI API (Faster)"],
     help="Choose 'Local' for free (CPU/GPU) or 'OpenAI API' for faster processing (costs money)",
-    horizontal=True
+    horizontal=True,
+    key="transcription_method"
 )
 
 # Warn if OpenAI API transcription is selected but no API key is available
@@ -374,6 +395,7 @@ if st.session_state.start_analysis:
         
         # Map friendly name to internal value
         method_internal = "openai" if "OpenAI API" in transcription_method else "local"
+        print(f"UI transcription_method radio value: '{transcription_method}' -> method_internal: '{method_internal}'", flush=True)
         
         # Progress callback that prints to terminal (stdout)
         def progress_callback(message: str):
@@ -400,6 +422,8 @@ if st.session_state.start_analysis:
                     progress_placeholder.write("⏳ **Step 2/4:** Transcribing audio with Whisper model...")
             elif "Analyzing video frames" in message:
                 progress_placeholder.write("⏳ **Step 3/4:** Analyzing video frames...")
+            elif "AI Provider:" in message:
+                status_placeholder.info(message)
             elif "Evaluating transcript" in message:
                 progress_placeholder.write("⏳ **Step 3/4:** Evaluating with AI...")
             elif "Generating qualitative feedback" in message:
@@ -528,8 +552,19 @@ if st.session_state.analysis_results is not None:
                 # Display model and device information
                 whisper_model = res.get('whisper_model', 'unknown')
                 device = res.get('device', 'unknown')
-                device_display = "Apple Silicon GPU (MPS)" if device == "mps" else ("CPU" if device == "cpu" else device.upper())
-                st.write(f"**Model:** Whisper {whisper_model} on {device_display}")
+                if device == "mps":
+                    device_display = "Apple Silicon GPU (MPS)"
+                elif device == "cpu":
+                    device_display = "CPU"
+                elif device == "remote":
+                    device_display = "OpenAI API"
+                else:
+                    device_display = device.upper()
+                
+                if device == "remote":
+                    st.write(f"**Model:** OpenAI Whisper API (whisper-1)")
+                else:
+                    st.write(f"**Model:** Whisper {whisper_model} on {device_display}")
                 
                 # Display detected language
                 language = res.get('language', 'unknown')
